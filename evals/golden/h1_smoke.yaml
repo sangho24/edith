@@ -1,0 +1,29 @@
+# Phase 1 H1 smoke — eval YAML 형식 미리 확정 (eval runner는 H4에서)
+id: h1_smoke
+phase: 1
+component: H1
+description: |
+  Runtime이 mock LLM의 end_turn 응답을 받고 output을 정상 trace에 기록한다.
+  실제 eval runner는 H4에서. 지금은 형식만 확정 + tests/test_smoke.py로 동등 검증.
+
+fixtures:
+  identity: |
+    # Edith
+    한국어 존댓말. 짧게.
+  schema: |
+    # Schema
+    Knowledge Twin.
+
+inputs:
+  task: "간단 인사"
+  scope: personal
+  llm_responses:
+    - stop_reason: end_turn
+      text: "안녕하세요"
+
+expected:
+  finalize_reason: end_turn
+  output_contains: ["안녕"]
+  n_steps: 1
+  tool_calls_made: 0
+  policy_blocks: 0

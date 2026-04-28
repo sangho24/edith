@@ -1,0 +1,44 @@
+# Phase 1 H4 self-test — eval runner가 자기 자신을 검증.
+# h1_smoke.yaml과 동일 시나리오를 더 풍부한 expected로 검증.
+id: h4_eval_self
+phase: 1
+component: H4
+description: |
+  Eval runner의 expected 매처 6종 모두 동작 확인:
+  finalize_reason / n_steps / output_contains / tool_calls_made / policy_blocks / files_created.
+  여기서는 tool_use → end_turn 시나리오로 capture_text가 raw/captures/에 파일을 만든다.
+
+fixtures:
+  identity: |
+    # Edith
+    한국어 존댓말. 짧게.
+  schema: |
+    # Schema
+    Knowledge Twin.
+
+inputs:
+  task: "이걸 캡처해"
+  scope: personal
+  budget_tokens: 8000
+  budget_steps: 5
+  llm_responses:
+    - stop_reason: tool_use
+      content_blocks:
+        - type: tool_use
+          id: tu_1
+          name: capture_text
+          input:
+            text: "오늘 X에 대해 메모"
+            scope: personal
+            source: eval_self
+    - stop_reason: end_turn
+      text: "캡처 완료"
+
+expected:
+  finalize_reason: end_turn
+  n_steps: 2
+  output_contains: ["캡처"]
+  tool_calls_made: 1
+  policy_blocks: 0
+  files_created:
+    - "raw/captures/*.md"

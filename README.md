@@ -35,6 +35,15 @@ ls raw/captures/
 이 시점에 LLM은 아직 동작하지 않습니다. 그게 의도된 것입니다.
 **"raw is immutable, wiki is LLM-owned, schema is the config"** 원칙이 layout에 박힌 게 Phase 0의 산출물입니다.
 
+## 빅픽쳐 / 문서
+
+| 문서 | 내용 |
+|---|---|
+| [`docs/01_strategy.md`](docs/01_strategy.md) | **전략** — 비전(Knowledge Twin), 문제 정의, 8개 task domain, 자동화 5단계, 3-zone 격리, two-channel surface, 3-tier 배포 |
+| [`docs/02_roadmap.md`](docs/02_roadmap.md) | **실행 로드맵** — Phase 0/1/2/3, harness 7개 컴포넌트 (H1-H7), 12개 feature (F1-F12), 12주 흐름 |
+| [`identity.md`](identity.md) | 비서 정체성 (Edith) — 어조·거절 룰·Push 정책·anti-atrophy |
+| [`CLAUDE.md`](CLAUDE.md) | 운영 schema (Karpathy Layer 3) — 디렉토리 규칙·답변 양식·compile 절차 |
+
 ## 다음 단계
 
 - Phase 1 (Week 1-3) — Harness Foundation: H1 Runtime → H2 Tool Registry → ... → H7 Memory Hooks
