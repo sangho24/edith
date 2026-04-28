@@ -133,5 +133,17 @@ def compile(dry_run: bool) -> None:  # noqa: A001
         sys.exit(1)
 
 
+@main.command()
+def daily() -> None:
+    """daily loop (Phase 2 W3) — compile + eval + dashboard + log.md append."""
+    from harness.daily import daily_loop
+
+    home = _edith_home()
+    result = daily_loop(home)
+    click.echo(result.render_text())
+    if result.failed:
+        sys.exit(1)
+
+
 if __name__ == "__main__":
     main()

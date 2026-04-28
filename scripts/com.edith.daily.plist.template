@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.edith.daily</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/sh</string>
+        <string>-c</string>
+        <string>cd ${EDITH_HOME} &amp;&amp; ${UV_BIN} run harness daily</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>EDITH_HOME</key>
+        <string>${EDITH_HOME}</string>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>22</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>${EDITH_HOME}/harness/daily.log</string>
+    <key>StandardErrorPath</key>
+    <string>${EDITH_HOME}/harness/daily.log</string>
+
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>

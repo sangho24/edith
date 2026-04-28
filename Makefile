@@ -43,6 +43,18 @@ compile:
 compile-dry:
 	uv run harness compile --dry-run
 
+daily:
+	uv run harness daily
+
+install-daily:
+	bash scripts/install_daily.sh install
+
+uninstall-daily:
+	bash scripts/install_daily.sh uninstall
+
+test-daily:
+	bash scripts/install_daily.sh test
+
 check: lint typecheck test
 	@echo ""
 	@echo "✓ all checks passed"
