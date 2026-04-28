@@ -1,0 +1,46 @@
+# Phase 3 F4 — Morning brief via runtime.
+# LLM이 "오늘 brief 줘" task를 받아 calendar_today, mail_triage, digest_latest를 차례로 호출.
+id: f4_morning_brief
+phase: 3
+component: F4
+description: |
+  morning brief를 LLM이 합성. 3개 read tool (calendar_today + mail_triage + digest_latest)
+  순차 호출 후 한 화면 텍스트로 답.
+
+fixtures:
+  identity: "# Edith\n한국어 존댓말. 짧게.\n"
+  schema: "# Schema\nKnowledge Twin. morning brief 합성 가능.\n"
+
+inputs:
+  task: "오늘 brief 한 줄로 알려줘"
+  scope: personal
+  budget_steps: 8
+  llm_responses:
+    - stop_reason: tool_use
+      content_blocks:
+        - type: tool_use
+          id: tu_1
+          name: calendar_today
+          input: {}
+    - stop_reason: tool_use
+      content_blocks:
+        - type: tool_use
+          id: tu_2
+          name: mail_triage
+          input:
+            limit: 50
+    - stop_reason: tool_use
+      content_blocks:
+        - type: tool_use
+          id: tu_3
+          name: digest_latest
+          input: {}
+    - stop_reason: end_turn
+      text: "오늘 일정·메일·digest 모두 비어있습니다. 평온한 하루입니다."
+
+expected:
+  finalize_reason: end_turn
+  n_steps: 4
+  tool_calls_made: 3
+  policy_blocks: 0
+  output_contains: ["일정", "메일"]

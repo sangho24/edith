@@ -56,6 +56,12 @@ today:
 mail:
 	uv run harness mail
 
+brief:
+	uv run harness brief
+
+gh-cron-get:
+	uv run harness gh-cron get
+
 install-daily:
 	bash scripts/install_daily.sh install
 

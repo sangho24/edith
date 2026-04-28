@@ -218,5 +218,112 @@ def mail(fixture: str | None, limit: int) -> None:
     click.echo(render_triage(items))
 
 
+@main.command()
+def brief() -> None:
+    """Morning Briefing (Phase 3 F4) — 오늘 일정 + 메일 + ds-digest + Top 3."""
+    from harness.morning import compose_brief
+
+    home = _edith_home()
+    b = compose_brief(home)
+    click.echo(b.render_text())
+
+
+@main.group("gh-cron")
+def gh_cron() -> None:
+    """GitHub Actions workflow cron 관리 (read · write CLI)."""
+
+
+@gh_cron.command("get")
+@click.option(
+    "--workflow",
+    "workflow_path",
+    default=None,
+    type=click.Path(),
+    help="workflow YAML 경로 (default: $EDITH_DS_DIGEST_WORKFLOW)",
+)
+def gh_cron_get(workflow_path: str | None) -> None:
+    """workflow의 cron 조회 (KST 자동 변환)."""
+    from harness.integrations.github_workflow import get_crons, parse_cron_to_kst
+
+    path = Path(workflow_path).expanduser() if workflow_path else _resolve_workflow()
+    if not path.exists():
+        click.echo(f"error: workflow not found: {path}", err=True)
+        sys.exit(1)
+    crons = get_crons(path)
+    if not crons:
+        click.echo(f"{path}: cron schedule 없음")
+        return
+    click.echo(f"{path}")
+    for i, c in enumerate(crons):
+        kst = parse_cron_to_kst(c)
+        kst_str = f" (KST {kst[0]:02d}:{kst[1]:02d})" if kst else ""
+        click.echo(f"  [{i}] {c}{kst_str}")
+
+
+@gh_cron.command("set")
+@click.option(
+    "--workflow",
+    "workflow_path",
+    default=None,
+    type=click.Path(),
+    help="workflow YAML 경로 (default: $EDITH_DS_DIGEST_WORKFLOW)",
+)
+@click.option(
+    "--time",
+    "kst_time",
+    required=True,
+    help="KST 시각 'HH:MM' 형식 (예: 08:00)",
+)
+@click.option("--idx", default=0, type=int, help="여러 cron 있을 때 idx (default 0)")
+@click.option("--yes", is_flag=True, help="확인 prompt skip")
+def gh_cron_set(workflow_path: str | None, kst_time: str, idx: int, yes: bool) -> None:
+    """workflow의 cron을 KST 시각 기준으로 변경 (UTC 자동 변환)."""
+    from harness.integrations.github_workflow import (
+        cron_for_kst_time,
+        get_crons,
+        parse_cron_to_kst,
+        set_cron,
+    )
+
+    try:
+        hh, mm = kst_time.split(":")
+        new_cron = cron_for_kst_time(int(hh), int(mm))
+    except (ValueError, AttributeError):
+        click.echo(f"error: --time format은 'HH:MM' (got {kst_time!r})", err=True)
+        sys.exit(1)
+
+    path = Path(workflow_path).expanduser() if workflow_path else _resolve_workflow()
+    if not path.exists():
+        click.echo(f"error: workflow not found: {path}", err=True)
+        sys.exit(1)
+
+    current = get_crons(path)
+    if idx >= len(current):
+        click.echo(f"error: cron[{idx}] 없음 (have {len(current)})", err=True)
+        sys.exit(1)
+    old_cron = current[idx]
+    old_kst = parse_cron_to_kst(old_cron)
+    old_kst_str = f"KST {old_kst[0]:02d}:{old_kst[1]:02d}" if old_kst else "(non-daily)"
+    click.echo(f"workflow : {path}")
+    click.echo(f"current  : {old_cron} ({old_kst_str})")
+    click.echo(f"new      : {new_cron} (KST {kst_time})")
+    if not yes:
+        click.confirm("적용?", abort=True)
+
+    ok, msg = set_cron(path, new_cron, idx=idx)
+    if not ok:
+        click.echo(f"✗ {msg}", err=True)
+        sys.exit(1)
+    click.echo(f"✓ {msg}")
+    click.echo("  (commit + push 후 GitHub Actions 다음 trigger부터 적용)")
+
+
+def _resolve_workflow() -> Path:
+    env = os.environ.get("EDITH_DS_DIGEST_WORKFLOW")
+    if env:
+        return Path(env).expanduser()
+    raise click.UsageError("--workflow PATH 또는 EDITH_DS_DIGEST_WORKFLOW env 필요")
+
+
 if __name__ == "__main__":
     main()

@@ -1,0 +1,147 @@
+"""Phase 3 F4 — Morning Briefing.
+
+매일 08시 (or 사용자 설정) 한 화면 brief:
+- 오늘 일정 (F2)
+- 메일 priority (F3)
+- ds-digest 최근 (F4)
+- Top 3 (rule-based 합성)
+
+Push 채널: 카톡 메모 (KakaoTalk Talk Memo API) 또는 이메일. 지금은 stdout/CLI.
+실제 push 통합은 F4.x (KakaoTalk) / F4.y (email).
+"""
+
+from __future__ import annotations
+
+import os
+from collections import Counter
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from pathlib import Path
+
+from harness.calendar import LocalCalendarSource, today_view
+from harness.integrations.ds_digest import LocalDigestSource
+from harness.mail import LocalMessageSource, triage
+
+
+@dataclass
+class MorningBrief:
+    today_str: str
+    today: dict = field(
+        default_factory=lambda: {"n_events": 0, "events": [], "total_busy_minutes": 0}
+    )
+    mail_summary: dict = field(
+        default_factory=lambda: {"n_unread": 0, "by_priority": {}, "urgent": [], "important": []}
+    )
+    digest: dict = field(default_factory=lambda: {"date": None, "items": [], "n": 0})
+    top3: list[str] = field(default_factory=list)
+
+    def render_text(self) -> str:
+        lines = [
+            "─" * 50,
+            f"☀️ Edith · {self.today_str}",
+            "─" * 50,
+        ]
+
+        # Top 3
+        if self.top3:
+            lines.append("Top 3:")
+            for t in self.top3:
+                lines.append(f"  • {t}")
+            lines.append("")
+
+        # 일정
+        n_ev = self.today["n_events"]
+        if n_ev:
+            busy = self.today["total_busy_minutes"]
+            lines.append(f"📅 일정 {n_ev}건 · {busy}분 ({busy / 60:.1f}h)")
+            for ev in self.today["events"][:5]:
+                lines.append(f"   {ev['summary']}")
+            if n_ev > 5:
+                lines.append(f"   ... +{n_ev - 5}건")
+        else:
+            lines.append("📅 일정: 없음")
+        lines.append("")
+
+        # 메일
+        n_mail = self.mail_summary["n_unread"]
+        if n_mail:
+            counts = self.mail_summary["by_priority"]
+            counts_str = " · ".join(f"{k}={v}" for k, v in counts.items() if v)
+            lines.append(f"📧 unread {n_mail}건 · {counts_str}")
+            for s in self.mail_summary["urgent"][:3]:
+                lines.append(f"   ❗ {s}")
+            for s in self.mail_summary["important"][:2]:
+                lines.append(f"   ★ {s}")
+        else:
+            lines.append("📧 unread 메일: 없음")
+        lines.append("")
+
+        # ds-digest
+        n_dig = self.digest["n"]
+        if n_dig:
+            lines.append(f"📰 ds-digest {n_dig}건 · {self.digest['date']}")
+            for item in self.digest["items"][:3]:
+                lines.append(f"   · {item['title'][:80]}")
+        else:
+            lines.append("📰 ds-digest: (오늘 결과 없음)")
+
+        return "\n".join(lines)
+
+
+def _build_top3(today: dict, mail_summary: dict, digest: dict) -> list[str]:
+    """rule-based Top 3 — urgent 메일 1개 + 첫 일정 2개 + digest 첫 1개. 부족하면 채워짐."""
+    top3: list[str] = []
+
+    for s in mail_summary["urgent"][:1]:
+        top3.append(f"📧 urgent: {s[:60]}")
+
+    for ev in today["events"][:2]:
+        top3.append(f"📅 {ev['summary']}")
+
+    if digest["items"] and len(top3) < 3:
+        top3.append(f"📰 {digest['items'][0]['title'][:60]}")
+
+    # 부족하면 important 메일로 채움
+    for s in mail_summary["important"][:3]:
+        if len(top3) >= 3:
+            break
+        top3.append(f"📧 {s[:60]}")
+
+    return top3[:3]
+
+
+def compose_brief(edith_home: Path) -> MorningBrief:
+    """오늘 brief 합성 (no LLM)."""
+    today_str = datetime.now(UTC).strftime("%Y-%m-%d (%a)")
+    brief = MorningBrief(today_str=today_str)
+
+    # 1. 일정
+    cal_path = Path(
+        os.environ.get("EDITH_CALENDAR_FIXTURE")
+        or (edith_home / "raw" / "calendar" / "events.json")
+    )
+    brief.today = today_view(LocalCalendarSource(cal_path))
+
+    # 2. 메일
+    mail_path = Path(
+        os.environ.get("EDITH_MAIL_FIXTURE") or (edith_home / "raw" / "mail" / "messages.json")
+    )
+    items = triage(LocalMessageSource(mail_path).list_unread())
+    counts = Counter(i.priority for i in items)
+    brief.mail_summary = {
+        "n_unread": len(items),
+        "by_priority": dict(counts),
+        "urgent": [i.message.subject for i in items if i.priority == "urgent"],
+        "important": [i.message.subject for i in items if i.priority == "important"],
+    }
+
+    # 3. ds-digest
+    digest_path = Path(
+        os.environ.get("EDITH_DS_DIGEST_LATEST") or (edith_home / "raw" / "digest" / "latest.json")
+    )
+    brief.digest = LocalDigestSource(digest_path).latest()
+
+    # 4. Top 3
+    brief.top3 = _build_top3(brief.today, brief.mail_summary, brief.digest)
+
+    return brief
