@@ -1,0 +1,32 @@
+# Phase 3 F2 — calendar_today tool via runtime.
+id: f2_today_via_llm
+phase: 3
+component: F2
+description: |
+  LLM이 "오늘 일정" task를 받아 calendar_today tool 호출하면 빈 일정 dict 반환 후 end_turn.
+  실제 events.json 없는 환경에서도 tool 호출이 깨지지 않는지 확인.
+
+fixtures:
+  identity: "# Edith\n한국어 존댓말. 짧게.\n"
+  schema: "# Schema\nKnowledge Twin.\n"
+
+inputs:
+  task: "오늘 일정 알려줘"
+  scope: personal
+  budget_steps: 4
+  llm_responses:
+    - stop_reason: tool_use
+      content_blocks:
+        - type: tool_use
+          id: tu_1
+          name: calendar_today
+          input: {}
+    - stop_reason: end_turn
+      text: "오늘은 등록된 일정이 없습니다."
+
+expected:
+  finalize_reason: end_turn
+  n_steps: 2
+  tool_calls_made: 1
+  policy_blocks: 0
+  output_contains: ["일정"]

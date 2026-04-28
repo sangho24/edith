@@ -1,0 +1,33 @@
+# Phase 3 F3 — mail_triage tool via runtime.
+id: f3_mail_triage
+phase: 3
+component: F3
+description: |
+  LLM이 "오늘 답해야 할 메일?" task를 받아 mail_triage tool 호출.
+  fixture 없는 환경에서도 깨지지 않고 빈 결과로 end_turn.
+
+fixtures:
+  identity: "# Edith\n한국어 존댓말. 짧게.\n"
+  schema: "# Schema\nKnowledge Twin.\n"
+
+inputs:
+  task: "읽지 않은 메일 priority 분류해줘"
+  scope: personal
+  budget_steps: 4
+  llm_responses:
+    - stop_reason: tool_use
+      content_blocks:
+        - type: tool_use
+          id: tu_1
+          name: mail_triage
+          input:
+            limit: 50
+    - stop_reason: end_turn
+      text: "읽지 않은 메일이 없습니다."
+
+expected:
+  finalize_reason: end_turn
+  n_steps: 2
+  tool_calls_made: 1
+  policy_blocks: 0
+  output_contains: ["메일"]

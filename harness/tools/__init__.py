@@ -51,10 +51,11 @@ class Registry:
 
 
 def build_default_registry() -> Registry:
-    """9개 typed tool 등록."""
-    from harness.tools import raw, util, wiki
+    """11개 typed tool 등록 (Phase 1: 9 + Phase 3 F2/F3: 2)."""
+    from harness.tools import calendar, mail, raw, util, wiki
 
     reg = Registry()
+    # Phase 1
     reg.register(wiki.WIKI_READ)
     reg.register(wiki.WIKI_WRITE)
     reg.register(wiki.WIKI_SEARCH)
@@ -64,4 +65,7 @@ def build_default_registry() -> Registry:
     reg.register(util.QUERY_DB)
     reg.register(util.REQUEST_APPROVAL)
     reg.register(util.EMIT_LOG)
+    # Phase 3 F2/F3
+    reg.register(calendar.CALENDAR_TODAY)
+    reg.register(mail.MAIL_TRIAGE)
     return reg

@@ -105,13 +105,14 @@ def test_policy_blocks_external_write(edith_home: Path) -> None:
     assert "calendar_create" not in names
 
 
-def test_registry_has_9_tools() -> None:
-    """기본 registry에 9개 tool 등록됨."""
+def test_registry_has_11_tools() -> None:
+    """기본 registry에 11개 tool 등록됨 (Phase 1: 9 + F2/F3: 2)."""
     reg = build_default_registry()
     specs = reg.all_specs()
-    assert len(specs) == 9
+    assert len(specs) == 11
     names = {t["name"] for t in specs}
     expected = {
+        # Phase 1
         "wiki_read",
         "wiki_write",
         "wiki_search",
@@ -121,6 +122,9 @@ def test_registry_has_9_tools() -> None:
         "query_db",
         "request_approval",
         "emit_log",
+        # Phase 3 F2/F3
+        "calendar_today",
+        "mail_triage",
     }
     assert names == expected
 

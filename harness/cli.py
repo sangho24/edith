@@ -180,5 +180,43 @@ def cap(text: tuple[str, ...], scope: str | None, source: str, via_llm: bool) ->
         sys.exit(1)
 
 
+@main.command()
+@click.option(
+    "--fixture",
+    default=None,
+    type=click.Path(),
+    help="events.json 경로 (default: $EDITH_HOME/raw/calendar/events.json)",
+)
+def today(fixture: str | None) -> None:
+    """오늘 캘린더 일정 (Phase 3 F2)."""
+    from harness.calendar import LocalCalendarSource, render_today, today_view
+
+    home = _edith_home()
+    fixture_path = Path(fixture) if fixture else home / "raw" / "calendar" / "events.json"
+    source = LocalCalendarSource(fixture_path)
+    view = today_view(source)
+    click.echo(render_today(view))
+
+
+@main.command()
+@click.option(
+    "--fixture",
+    default=None,
+    type=click.Path(),
+    help="messages.json 경로 (default: $EDITH_HOME/raw/mail/messages.json)",
+)
+@click.option("--limit", default=50, type=int)
+def mail(fixture: str | None, limit: int) -> None:
+    """unread 메일 priority triage (Phase 3 F3)."""
+    from harness.mail import LocalMessageSource, render_triage
+    from harness.mail import triage as triage_fn
+
+    home = _edith_home()
+    fixture_path = Path(fixture) if fixture else home / "raw" / "mail" / "messages.json"
+    source = LocalMessageSource(fixture_path)
+    items = triage_fn(source.list_unread(limit=limit))
+    click.echo(render_triage(items))
+
+
 if __name__ == "__main__":
     main()

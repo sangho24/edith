@@ -50,6 +50,12 @@ cap:
 	@if [ -z "$(TEXT)" ]; then echo "usage: make cap TEXT=\"...\""; exit 1; fi
 	uv run harness cap "$(TEXT)"
 
+today:
+	uv run harness today
+
+mail:
+	uv run harness mail
+
 install-daily:
 	bash scripts/install_daily.sh install
 
