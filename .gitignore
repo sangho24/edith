@@ -1,0 +1,43 @@
+# Secrets
+.env
+.env.local
+*.key
+*.pem
+secrets/
+
+# Databases (Phase 1+)
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Harness traces (큰 JSONL, 외장 SSD에 별도 보관)
+harness/traces/*.jsonl
+
+# Python (Phase 1+)
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Obsidian (wiki/를 vault로 열 때 생성됨)
+wiki/.obsidian/workspace*
+wiki/.obsidian/cache
+wiki/.obsidian/snippets/
+
+# Logs
+*.log
