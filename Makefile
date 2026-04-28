@@ -84,6 +84,34 @@ jd:
 weekly:
 	uv run harness weekly
 
+# ── F11 Home Hub (docker) ──
+
+hub-up:
+	cd docker && docker compose up -d --build
+
+hub-down:
+	cd docker && docker compose down
+
+hub-logs:
+	cd docker && docker compose logs -f --tail 100
+
+hub-shell:
+	cd docker && docker compose run --rm edith-shell
+
+hub-restart:
+	cd docker && docker compose restart
+
+# ── F12 VPS Relay (배포는 VPS에서) ──
+
+relay-up:
+	cd vps && docker compose up -d --build
+
+relay-logs:
+	cd vps && docker compose logs -f --tail 100
+
+relay-down:
+	cd vps && docker compose down
+
 install-daily:
 	bash scripts/install_daily.sh install
 

@@ -19,8 +19,7 @@ def _jd_analyze(args: dict[str, Any], ctx: Context) -> dict[str, Any]:
         return {
             "ok": False,
             "error": (
-                "raw/career/resume.md 가 없습니다. "
-                "본인 이력서를 markdown 으로 작성해서 두세요."
+                "raw/career/resume.md 가 없습니다. 본인 이력서를 markdown 으로 작성해서 두세요."
             ),
         }
 

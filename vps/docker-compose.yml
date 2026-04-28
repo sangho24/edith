@@ -1,0 +1,21 @@
+# Phase 3 F12 — VPS Relay stack.
+# 작은 VPS (Lightsail / Oracle Free Tier) 에서 실행.
+
+version: "3.9"
+
+services:
+  relay:
+    build: .
+    container_name: edith-relay
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
+    environment:
+      - RELAY_SECRET=${RELAY_SECRET}
+      - HOME_HUB_URL=${HOME_HUB_URL}
+      - TZ=Asia/Seoul
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8765/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

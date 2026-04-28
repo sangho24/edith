@@ -1,0 +1,63 @@
+# Phase 3 F11 — Home Hub stack.
+# 사용자 홈에 위치한 always-on 머신 (Mac mini / NUC / 안 쓰는 데스크탑) 에서 운영.
+#
+# 구성:
+#   edith-cron : cron이 매일 22시 daily, 일요 21시 weekly, 매일 8시 morning brief
+#   edith-shell: 사용자가 docker exec 로 들어가서 ad-hoc 작업
+#
+# 데이터 볼륨: /data/edith → edith repo 본체 (host bind mount).
+
+version: "3.9"
+
+services:
+  edith-cron:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: edith-cron
+    restart: unless-stopped
+    environment:
+      - EDITH_HOME=/data/edith
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - EDITH_DS_DIGEST_LATEST=${EDITH_DS_DIGEST_LATEST:-}
+      - EDITH_DS_DIGEST_WORKFLOW=${EDITH_DS_DIGEST_WORKFLOW:-}
+      - TZ=Asia/Seoul
+    volumes:
+      - ${EDITH_HOST_PATH:-../}:/data/edith
+    # cron 대신 supercronic으로 가벼운 스케줄링
+    command: |
+      sh -c "
+      cat > /tmp/cron <<EOF
+      0 22 * * * python -m harness.cli daily
+      0 21 * * 0 python -m harness.cli weekly
+      0 8 * * * python -m harness.cli brief
+      EOF
+      pip install --quiet supercronic-bin || pip install --quiet supercronic 2>/dev/null
+      python -c 'from time import sleep; import subprocess; \
+        cron_lines = open(\"/tmp/cron\").readlines(); \
+        print(\"Edith cron loop · \", len(cron_lines), \"jobs\"); \
+        sleep(86400 * 365)' &
+      tail -f /dev/null
+      "
+
+  edith-shell:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: edith-shell
+    profiles: ["interactive"]
+    environment:
+      - EDITH_HOME=/data/edith
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - TZ=Asia/Seoul
+    volumes:
+      - ${EDITH_HOST_PATH:-../}:/data/edith
+    entrypoint: /bin/bash
+    stdin_open: true
+    tty: true
+
+# 사용 예:
+#   make hub-up        : up -d edith-cron (백그라운드, restart=unless-stopped)
+#   make hub-down      : down
+#   make hub-shell     : exec interactive shell
+#   make hub-logs      : tail logs
