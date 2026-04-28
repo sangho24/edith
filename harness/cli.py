@@ -228,6 +228,134 @@ def brief() -> None:
     click.echo(b.render_text())
 
 
+@main.group("approve")
+def approve_group() -> None:
+    """approval queue 관리 (F5) — list / yes / no / show."""
+
+
+@approve_group.command("list")
+@click.option(
+    "--status",
+    default="pending",
+    type=click.Choice(["pending", "approved", "rejected", "expired", "executed", "all"]),
+)
+def approve_list(status: str) -> None:
+    """승인 큐 목록 (default: pending)."""
+    from harness.approval import ApprovalQueue
+
+    home = _edith_home()
+    queue = ApprovalQueue(home / "harness" / "approvals.json")
+    queue.expire_old()
+    items = queue.list(status=None if status == "all" else status)  # type: ignore[arg-type]
+    if not items:
+        click.echo(f"({status}) 항목 없음")
+        return
+    for r in items:
+        risk = "❗" if r.risk_score >= 8 else ("⚠️" if r.risk_score >= 5 else "·")
+        rev = "↩" if r.reversible else "🔒"
+        click.echo(f"{risk}{rev} [{r.status}] {r.id} · {r.action_type} → {r.target_system}")
+        click.echo(f"   {r.preview[:80]}")
+        click.echo(f"   expires: {r.expires_at}")
+
+
+@approve_group.command("show")
+@click.argument("id_")
+def approve_show(id_: str) -> None:
+    """approval 상세."""
+    from harness.approval import ApprovalQueue
+
+    queue = ApprovalQueue(_edith_home() / "harness" / "approvals.json")
+    r = queue.get(id_)
+    if r is None:
+        click.echo(f"not found: {id_}", err=True)
+        sys.exit(1)
+    click.echo(f"id            : {r.id}")
+    click.echo(f"action_type   : {r.action_type}")
+    click.echo(f"target_system : {r.target_system}")
+    click.echo(f"status        : {r.status}")
+    click.echo(f"risk_score    : {r.risk_score}/10")
+    click.echo(f"reversible    : {r.reversible}")
+    click.echo(f"requested_at  : {r.requested_at}")
+    click.echo(f"expires_at    : {r.expires_at}")
+    if r.approved_by:
+        click.echo(f"approved_by   : {r.approved_by}")
+    if r.executed_at:
+        click.echo(f"executed_at   : {r.executed_at}")
+    click.echo("--- preview ---")
+    click.echo(r.preview)
+
+
+@approve_group.command("yes")
+@click.argument("id_")
+def approve_yes(id_: str) -> None:
+    """approve. status: pending → approved. executor는 feature별 별도 실행."""
+    from harness.approval import ApprovalQueue
+
+    queue = ApprovalQueue(_edith_home() / "harness" / "approvals.json")
+    try:
+        r = queue.approve(id_)
+    except (KeyError, ValueError) as e:
+        click.echo(f"✗ {e}", err=True)
+        sys.exit(1)
+    click.echo(f"✓ approved {r.id} ({r.action_type})")
+    click.echo("  executor가 실제 action 실행 후 `mark_executed` 호출 필요.")
+
+
+@approve_group.command("no")
+@click.argument("id_")
+def approve_no(id_: str) -> None:
+    """reject. status: pending/approved → rejected."""
+    from harness.approval import ApprovalQueue
+
+    queue = ApprovalQueue(_edith_home() / "harness" / "approvals.json")
+    try:
+        r = queue.reject(id_)
+    except (KeyError, ValueError) as e:
+        click.echo(f"✗ {e}", err=True)
+        sys.exit(1)
+    click.echo(f"✗ rejected {r.id} ({r.action_type})")
+
+
+@main.command()
+@click.argument("query", nargs=-1, required=True)
+@click.option("--top-k", default=10, type=int)
+def recall(query: tuple[str, ...], top_k: int) -> None:
+    """Memory recall (F6) — wiki + raw에서 query 검색."""
+    from harness.recall import recall as recall_fn
+    from harness.recall import render_recall
+
+    q = " ".join(query)
+    hits = recall_fn(q, _edith_home(), top_k=top_k)
+    click.echo(render_recall(hits, q))
+
+
+@main.command()
+@click.argument("arxiv_input")
+def paper(arxiv_input: str) -> None:
+    """Paper triage (F8) — arxiv URL/ID → 메타데이터 + wiki summary path 제안."""
+    from harness.integrations.arxiv import fetch_arxiv_metadata, parse_arxiv_id
+
+    arxiv_id = parse_arxiv_id(arxiv_input)
+    if not arxiv_id:
+        click.echo(f"✗ arxiv id를 파싱할 수 없습니다: {arxiv_input}", err=True)
+        sys.exit(1)
+    try:
+        meta = fetch_arxiv_metadata(arxiv_id)
+    except Exception as e:
+        click.echo(f"✗ fetch error: {e}", err=True)
+        sys.exit(1)
+    if not meta:
+        click.echo("✗ arxiv API에서 entry 못 찾음", err=True)
+        sys.exit(1)
+    click.echo(f"id       : {meta['id']}")
+    click.echo(f"title    : {meta['title']}")
+    click.echo(f"authors  : {', '.join(meta['authors'][:5])}")
+    click.echo(f"category : {meta.get('primary_category', '')}")
+    click.echo("\n--- abstract ---")
+    click.echo(meta["abstract"][:600])
+    click.echo(f"\nsuggested wiki: wiki/summaries/arxiv_{meta['id'].replace('.', '_')}.md")
+
+
 @main.group("gh-cron")
 def gh_cron() -> None:
     """GitHub Actions workflow cron 관리 (read · write CLI)."""

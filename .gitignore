@@ -15,6 +15,9 @@ secrets/
 harness/compile_log.json
 harness/daily.log
 
+# Phase 3 F5 — approval queue (machine-local state)
+harness/approvals.json
+
 # Harness traces (큰 JSONL, 외장 SSD에 별도 보관)
 harness/traces/*.jsonl
 

@@ -62,6 +62,17 @@ brief:
 gh-cron-get:
 	uv run harness gh-cron get
 
+approve-list:
+	uv run harness approve list
+
+recall:
+	@if [ -z "$(Q)" ]; then echo "usage: make recall Q=\"...\""; exit 1; fi
+	uv run harness recall "$(Q)"
+
+paper:
+	@if [ -z "$(URL)" ]; then echo "usage: make paper URL=\"https://arxiv.org/abs/...\""; exit 1; fi
+	uv run harness paper "$(URL)"
+
 install-daily:
 	bash scripts/install_daily.sh install
 

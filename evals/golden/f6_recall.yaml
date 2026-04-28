@@ -1,0 +1,51 @@
+# Phase 3 F6 — Memory recall via runtime.
+id: f6_recall
+phase: 3
+component: F6
+description: |
+  LLM이 "transformer interpretability에 대해 내가 뭘 메모했더라" task를 받아
+  memory_recall tool로 wiki + raw 검색 후 답변.
+
+fixtures:
+  identity: "# Edith\n한국어 존댓말. 짧게.\n"
+  schema: "# Schema\n질문에 답할 때 memory_recall로 source 확보.\n"
+  wiki_files:
+    "wiki/concepts/transformer_interpretability.md": |
+      ---
+      type: concept
+      scope: personal
+      support_refs:
+        - raw/captures/seed.md
+      confidence: medium
+      last_updated: 2026-04-28
+      ---
+
+      # Transformer Interpretability
+
+      mechanistic interpretability, attention pattern 분석, circuit discovery.
+  raw_files:
+    "raw/captures/seed.md": |
+      transformer interpretability에 관심 있음.
+
+inputs:
+  task: "transformer interpretability에 대해 내가 메모한 거 있나?"
+  scope: personal
+  budget_steps: 4
+  llm_responses:
+    - stop_reason: tool_use
+      content_blocks:
+        - type: tool_use
+          id: tu_1
+          name: memory_recall
+          input:
+            query: transformer interpretability
+            top_k: 5
+    - stop_reason: end_turn
+      text: "wiki/concepts/transformer_interpretability.md 에 메모하셨습니다. mechanistic interpretability, attention pattern, circuit discovery 관심 분야로 정리되어 있습니다."
+
+expected:
+  finalize_reason: end_turn
+  n_steps: 2
+  tool_calls_made: 1
+  policy_blocks: 0
+  output_contains: ["interpretability", "wiki"]

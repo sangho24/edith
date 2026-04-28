@@ -51,8 +51,8 @@ class Registry:
 
 
 def build_default_registry() -> Registry:
-    """13개 typed tool 등록 (Phase 1: 9 + Phase 3 F2/F3/F4: 4)."""
-    from harness.tools import calendar, digest, github, mail, raw, util, wiki
+    """15개 typed tool 등록 (Phase 1: 9 + Phase 3 F2/F3/F4/F6/F8: 6)."""
+    from harness.tools import calendar, digest, github, mail, paper, raw, recall, util, wiki
 
     reg = Registry()
     # Phase 1
@@ -71,4 +71,7 @@ def build_default_registry() -> Registry:
     # Phase 3 F4
     reg.register(digest.DIGEST_LATEST)
     reg.register(github.GITHUB_WORKFLOW_GET_CRON)
+    # Phase 3 F6/F8
+    reg.register(recall.MEMORY_RECALL)
+    reg.register(paper.PAPER_TRIAGE)
     return reg

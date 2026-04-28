@@ -57,13 +57,22 @@ QUERY_DB = Tool(
 
 REQUEST_APPROVAL = Tool(
     name="request_approval",
-    description="외부 발송 등 비가역 액션을 승인 큐에 등록. preview 필수.",
+    description=(
+        "외부 발송 등 비가역 액션을 승인 큐에 등록 (F5). "
+        "사용자가 CLI에서 승인·거절. action_type / preview 필수."
+    ),
     input_schema={
         "type": "object",
         "properties": {
-            "action": {"type": "string"},
-            "preview": {"type": "string"},
-            "reversible": {"type": "boolean", "default": False},
+            "action": {"type": "string", "description": "action_type, e.g., calendar_create"},
+            "target_system": {"type": "string", "description": "google_calendar, gmail 등"},
+            "preview": {
+                "type": "string",
+                "description": "변경 내용 diff/text — 사용자가 보고 판단",
+            },
+            "risk_score": {"type": "integer", "default": 5, "description": "1-10"},
+            "reversible": {"type": "boolean", "default": True},
+            "expires_minutes": {"type": "integer", "default": 30},
         },
         "required": ["action", "preview"],
     },

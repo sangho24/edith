@@ -1,0 +1,42 @@
+# Phase 3 F5 — Approval Queue 기본 동작.
+# LLM이 calendar_create를 직접 호출하면 R2 차단, request_approval로 우회 → queue 등록.
+id: f5_approval_flow
+phase: 3
+component: F5
+description: |
+  LLM이 calendar event 생성 task를 받아 직접 calendar_create 시도 → R2 차단 →
+  request_approval 로 우회 → queue 등록 후 사용자 승인 안내 메시지로 end_turn.
+
+fixtures:
+  identity: "# Edith\n한국어 존댓말. 짧게.\n"
+  schema: "# Schema\n비가역 외부 발송은 request_approval 로.\n"
+
+inputs:
+  task: "내일 오전 10시 ICLR review 미팅 calendar에 추가해줘"
+  scope: personal
+  budget_steps: 5
+  llm_responses:
+    - stop_reason: tool_use
+      content_blocks:
+        - type: tool_use
+          id: tu_1
+          name: request_approval
+          input:
+            action: calendar_create
+            target_system: google_calendar
+            preview: |
+              title: ICLR review 미팅
+              start: 2026-04-29 10:00 KST
+              end: 2026-04-29 11:00 KST
+              attendees: []
+            risk_score: 4
+            reversible: true
+    - stop_reason: end_turn
+      text: "approval queue에 등록했습니다. `harness approve list` 로 확인 후 `harness approve yes <id>` 실행하세요."
+
+expected:
+  finalize_reason: end_turn
+  n_steps: 2
+  tool_calls_made: 1
+  policy_blocks: 0
+  output_contains: ["approve"]
