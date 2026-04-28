@@ -34,6 +34,9 @@ typecheck:
 eval:
 	uv run harness eval
 
+dash:
+	uv run harness dash --window 24
+
 check: lint typecheck test
 	@echo ""
 	@echo "✓ all checks passed"

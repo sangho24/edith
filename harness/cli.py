@@ -109,5 +109,16 @@ def eval(golden_dir: str | None, pattern: str) -> None:  # noqa: A001
         sys.exit(1)
 
 
+@main.command()
+@click.option("--window", default=24, type=int, help="시간 window (hours)")
+def dash(window: int) -> None:
+    """observability dashboard (H6) — 최근 window 시간 trace 통계."""
+    from harness.dashboard import compute_stats
+
+    home = _edith_home()
+    stats = compute_stats(home / "harness" / "traces", window_hours=window)
+    click.echo(stats.render_text())
+
+
 if __name__ == "__main__":
     main()

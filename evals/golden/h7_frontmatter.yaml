@@ -1,0 +1,49 @@
+# H7 self-test — wiki_write 후 frontmatter가 자동 삽입됐는지 확인.
+id: h7_frontmatter
+phase: 1
+component: H7
+description: |
+  LLM이 wiki_write 호출 시 content에 frontmatter를 안 적었어도,
+  H7 hook이 path에서 type 추론(entity/concept/summary) + scope/support_refs/last_updated 자동 prepend.
+  files_contain 매처로 frontmatter 필드 확인.
+
+fixtures:
+  identity: |
+    # Edith
+    한국어 존댓말. 짧게.
+  schema: |
+    # Schema
+    Knowledge Twin.
+
+inputs:
+  task: "김교수 entity 페이지 작성"
+  scope: personal
+  llm_responses:
+    - stop_reason: tool_use
+      content_blocks:
+        - type: tool_use
+          id: tu_1
+          name: wiki_write
+          input:
+            path: wiki/entities/김교수.md
+            content: "# 김교수\n\nICLR 2026 area chair."
+            support_refs:
+              - raw/meetings/2026-04-25.md
+    - stop_reason: end_turn
+      text: "완료"
+
+expected:
+  finalize_reason: end_turn
+  n_steps: 2
+  tool_calls_made: 1
+  policy_blocks: 0
+  files_created:
+    - "wiki/entities/김교수.md"
+  files_contain:
+    "wiki/entities/김교수.md":
+      - "type: entity"
+      - "scope: personal"
+      - "support_refs"
+      - "raw/meetings/2026-04-25.md"
+      - "# 김교수"
+      - "ICLR 2026 area chair"

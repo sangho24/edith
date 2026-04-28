@@ -116,6 +116,16 @@ def _check_expected(trace: Trace, expected: dict[str, Any], home: Path) -> list[
         for glob_pat in expected["files_created"]:
             if not list(home.glob(glob_pat)):
                 failures.append(f"expected file glob not found: {glob_pat}")
+    if "files_contain" in expected:
+        for relpath, needles in expected["files_contain"].items():
+            target = home / relpath
+            if not target.exists():
+                failures.append(f"files_contain: file not found: {relpath}")
+                continue
+            content = target.read_text(encoding="utf-8")
+            for needle in needles:
+                if needle not in content:
+                    failures.append(f"files_contain[{relpath}] missing: {needle!r}")
 
     return failures
 

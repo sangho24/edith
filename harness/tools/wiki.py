@@ -1,15 +1,26 @@
 """wiki_* tools — wiki/ markdown R/W + 키워드 검색.
 
-FTS5 기반 검색은 H6에서. 지금은 단순 substring grep.
+H7: wiki_write에 frontmatter 자동 삽입 (없으면 prepend, 있으면 보존).
+FTS5 기반 검색은 Phase 2에서. 지금은 단순 substring grep.
 """
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from harness.state import Context
 from harness.tools import Tool
+
+# H7: log.md / INDEX.md / contradictions.md 는 frontmatter 강제 안 함
+SPECIAL_WIKI_PAGES = {
+    "wiki/log.md",
+    "wiki/INDEX.md",
+    "wiki/contradictions.md",
+}
 
 
 def _wiki_path(ctx: Context, rel: str) -> Path:
@@ -19,6 +30,35 @@ def _wiki_path(ctx: Context, rel: str) -> Path:
     if not str(full).startswith(str(base)):
         raise ValueError(f"path escape: {rel}")
     return full
+
+
+def _infer_page_type(rel: str) -> str:
+    """경로에서 wiki page type 추론."""
+    if "/entities/" in rel:
+        return "entity"
+    if "/concepts/" in rel:
+        return "concept"
+    if "/summaries/" in rel:
+        return "summary"
+    return "unknown"
+
+
+def _has_frontmatter(content: str) -> bool:
+    """content가 '---\\n'으로 시작하는지 (frontmatter 있는지)."""
+    return content.lstrip().startswith("---\n")
+
+
+def _build_frontmatter(args: dict[str, Any], ctx: Context) -> str:
+    """H7. args + ctx로 frontmatter dict → YAML 블록 생성."""
+    fm = {
+        "type": _infer_page_type(args["path"]),
+        "scope": args.get("scope", ctx.scope),
+        "support_refs": args["support_refs"],
+        "confidence": args.get("confidence", "medium"),
+        "last_updated": datetime.now(UTC).strftime("%Y-%m-%d"),
+    }
+    body = yaml.safe_dump(fm, sort_keys=False, allow_unicode=True)
+    return f"---\n{body}---\n\n"
 
 
 def _wiki_read(args: dict[str, Any], ctx: Context) -> dict[str, Any]:
@@ -32,10 +72,24 @@ def _wiki_write(args: dict[str, Any], ctx: Context) -> dict[str, Any]:
     support_refs = args.get("support_refs", [])
     if not support_refs:
         return {"ok": False, "reason": "support_refs required"}
-    path = _wiki_path(ctx, args["path"])
+
+    rel = args["path"]
+    content = args["content"]
+    frontmatter_added = False
+
+    # H7: 특수 페이지가 아니고 frontmatter가 없으면 자동 prepend
+    if rel not in SPECIAL_WIKI_PAGES and not _has_frontmatter(content):
+        content = _build_frontmatter(args, ctx) + content
+        frontmatter_added = True
+
+    path = _wiki_path(ctx, rel)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(args["content"], encoding="utf-8")
-    return {"ok": True, "path": str(path.relative_to(ctx.edith_home))}
+    path.write_text(content, encoding="utf-8")
+    return {
+        "ok": True,
+        "path": str(path.relative_to(ctx.edith_home)),
+        "frontmatter_auto_added": frontmatter_added,
+    }
 
 
 def _wiki_search(args: dict[str, Any], ctx: Context) -> dict[str, Any]:
