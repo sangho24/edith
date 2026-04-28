@@ -1,0 +1,45 @@
+# Phase 3 F1 — Quick Capture via LLM.
+# user가 capture를 LLM 통해 (--via-llm) 부르면 runtime이 capture_text tool을 호출,
+# raw/captures/ 에 frontmatter 포함 파일 생성.
+id: f1_capture_via_llm
+phase: 3
+component: F1
+description: |
+  capture task가 들어왔을 때 LLM이 capture_text tool을 호출해서 raw/captures/<ts>_*.md 에
+  scope·source frontmatter와 함께 저장하는지 확인.
+
+fixtures:
+  identity: "# Edith\n한국어 존댓말. 짧게.\n"
+  schema: "# Schema\nKnowledge Twin.\n"
+
+inputs:
+  task: "다음 텍스트를 capture해라: 오늘 새 아이디어 — Edith를 통해 weekly retro 자동화"
+  scope: personal
+  budget_steps: 5
+  llm_responses:
+    - stop_reason: tool_use
+      content_blocks:
+        - type: tool_use
+          id: tu_1
+          name: capture_text
+          input:
+            text: "오늘 새 아이디어 — Edith를 통해 weekly retro 자동화"
+            scope: personal
+            source: cli_cap
+    - stop_reason: end_turn
+      text: "캡처 완료 — raw/captures/에 저장됨"
+
+expected:
+  finalize_reason: end_turn
+  n_steps: 2
+  tool_calls_made: 1
+  policy_blocks: 0
+  output_contains: ["캡처"]
+  files_created:
+    - "raw/captures/*.md"
+  files_contain:
+    "raw/captures/*.md":
+      - "source: cli_cap"
+      - "scope: personal"
+      - "captured_at:"
+      - "weekly retro"

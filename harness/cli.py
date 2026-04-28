@@ -145,5 +145,40 @@ def daily() -> None:
         sys.exit(1)
 
 
+@main.command()
+@click.argument("text", nargs=-1, required=True)
+@click.option(
+    "--scope",
+    default=None,
+    type=click.Choice(["personal", "school", "work"]),
+    help="명시 안 하면 자동 분류",
+)
+@click.option("--source", default="manual", help="frontmatter source 필드")
+@click.option(
+    "--via-llm",
+    is_flag=True,
+    help="runtime/LLM 통과 (trace 기록, wiki 즉시 통합 가능)",
+)
+def cap(text: tuple[str, ...], scope: str | None, source: str, via_llm: bool) -> None:
+    """Quick capture (Phase 3 F1) — 텍스트를 raw/captures/에 저장."""
+    from harness.capture import capture_to_raw
+
+    home = _edith_home()
+    result = capture_to_raw(
+        text=" ".join(text),
+        edith_home=home,
+        scope=cast(Scope, scope) if scope else None,
+        source=source,
+        via_llm=via_llm,
+    )
+    if result.ok:
+        click.echo(f"✓ {result.path} (scope={result.scope})")
+        if result.trace_id:
+            click.echo(f"  trace: {result.trace_id}")
+    else:
+        click.echo(f"✗ {result.error or 'failed'}", err=True)
+        sys.exit(1)
+
+
 if __name__ == "__main__":
     main()

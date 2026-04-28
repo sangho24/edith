@@ -118,10 +118,18 @@ def _check_expected(trace: Trace, expected: dict[str, Any], home: Path) -> list[
                 failures.append(f"expected file glob not found: {glob_pat}")
     if "files_contain" in expected:
         for relpath, needles in expected["files_contain"].items():
-            target = home / relpath
-            if not target.exists():
-                failures.append(f"files_contain: file not found: {relpath}")
-                continue
+            # glob 지원: 매치된 첫 파일에 대해 검사
+            if "*" in relpath:
+                matches = list(home.glob(relpath))
+                if not matches:
+                    failures.append(f"files_contain: no glob match: {relpath}")
+                    continue
+                target = matches[0]
+            else:
+                target = home / relpath
+                if not target.exists():
+                    failures.append(f"files_contain: file not found: {relpath}")
+                    continue
             content = target.read_text(encoding="utf-8")
             for needle in needles:
                 if needle not in content:

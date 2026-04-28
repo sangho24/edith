@@ -46,6 +46,10 @@ compile-dry:
 daily:
 	uv run harness daily
 
+cap:
+	@if [ -z "$(TEXT)" ]; then echo "usage: make cap TEXT=\"...\""; exit 1; fi
+	uv run harness cap "$(TEXT)"
+
 install-daily:
 	bash scripts/install_daily.sh install
 
