@@ -37,6 +37,12 @@ eval:
 dash:
 	uv run harness dash --window 24
 
+compile:
+	uv run harness compile
+
+compile-dry:
+	uv run harness compile --dry-run
+
 check: lint typecheck test
 	@echo ""
 	@echo "✓ all checks passed"

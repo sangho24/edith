@@ -11,6 +11,9 @@ secrets/
 *.sqlite
 *.sqlite3
 
+# Phase 2 — compile state (machine-local)
+harness/compile_log.json
+
 # Harness traces (큰 JSONL, 외장 SSD에 별도 보관)
 harness/traces/*.jsonl
 

@@ -120,5 +120,18 @@ def dash(window: int) -> None:
     click.echo(stats.render_text())
 
 
+@main.command()
+@click.option("--dry-run", is_flag=True, help="실행 안 하고 새 파일 list만")
+def compile(dry_run: bool) -> None:  # noqa: A001
+    """raw → wiki LLM 컴파일 (Phase 2 W1)."""
+    from harness.compile import compile_raw
+
+    home = _edith_home()
+    result = compile_raw(home, dry_run=dry_run)
+    click.echo(result.render_text())
+    if result.failed:
+        sys.exit(1)
+
+
 if __name__ == "__main__":
     main()

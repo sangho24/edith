@@ -1,0 +1,65 @@
+# Phase 2 W1 self-test — compile pipeline 시뮬레이션.
+# 이 케이스는 compile_raw 자체를 직접 부르진 않고, runtime이 compile task를 받았을 때
+# wiki_write가 정상 동작하는지만 확인 (compile orchestration은 test_compile.py에서).
+id: w1_compile_basic
+phase: 2
+component: W1
+description: |
+  raw 파일 1개를 wiki 에 통합하는 task가 들어왔을 때 LLM이 raw_read → wiki_write 흐름으로
+  동작하고, H7 hook이 frontmatter 자동 삽입하는지.
+
+fixtures:
+  identity: "# Edith\n한국어 존댓말. 짧게.\n"
+  schema: "# Schema\nKnowledge Twin.\n"
+  raw_files:
+    "raw/captures/2026-04-26.md": |
+      # 2026-04-26 메모
+
+      오늘 김교수님과 ICLR 2026 area chair 관련 짧은 미팅.
+      transformer interpretability 분야 review process 듣게 됨.
+
+inputs:
+  task: "raw/captures/2026-04-26.md 를 wiki 에 통합해라"
+  scope: personal
+  budget_tokens: 8000
+  budget_steps: 6
+  llm_responses:
+    - stop_reason: tool_use
+      content_blocks:
+        - type: tool_use
+          id: tu_1
+          name: raw_read
+          input:
+            path: "raw/captures/2026-04-26.md"
+    - stop_reason: tool_use
+      content_blocks:
+        - type: tool_use
+          id: tu_2
+          name: wiki_write
+          input:
+            path: "wiki/entities/김교수.md"
+            content: |
+              # 김교수
+
+              ## fact
+              - 2026-04-26 미팅: ICLR 2026 area chair (raw/captures/2026-04-26.md)
+            support_refs:
+              - "raw/captures/2026-04-26.md"
+    - stop_reason: end_turn
+      text: "entities/김교수.md 생성 + ICLR 2026 area chair fact 추가"
+
+expected:
+  finalize_reason: end_turn
+  n_steps: 3
+  tool_calls_made: 2
+  policy_blocks: 0
+  output_contains: ["김교수", "ICLR"]
+  files_created:
+    - "wiki/entities/김교수.md"
+  files_contain:
+    "wiki/entities/김교수.md":
+      - "type: entity"
+      - "scope: personal"
+      - "support_refs"
+      - "raw/captures/2026-04-26.md"
+      - "ICLR 2026 area chair"
