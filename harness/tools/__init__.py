@@ -51,8 +51,20 @@ class Registry:
 
 
 def build_default_registry() -> Registry:
-    """15개 typed tool 등록 (Phase 1: 9 + Phase 3 F2/F3/F4/F6/F8: 6)."""
-    from harness.tools import calendar, digest, github, mail, paper, raw, recall, util, wiki
+    """17개 typed tool 등록 (Phase 1: 9 + Phase 3: 8)."""
+    from harness.tools import (
+        calendar,
+        digest,
+        github,
+        jd,
+        mail,
+        paper,
+        pr,
+        raw,
+        recall,
+        util,
+        wiki,
+    )
 
     reg = Registry()
     # Phase 1
@@ -74,4 +86,7 @@ def build_default_registry() -> Registry:
     # Phase 3 F6/F8
     reg.register(recall.MEMORY_RECALL)
     reg.register(paper.PAPER_TRIAGE)
+    # Phase 3 F7/F9
+    reg.register(pr.PR_REVIEW)
+    reg.register(jd.JD_ANALYZE)
     return reg

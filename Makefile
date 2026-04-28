@@ -73,6 +73,17 @@ paper:
 	@if [ -z "$(URL)" ]; then echo "usage: make paper URL=\"https://arxiv.org/abs/...\""; exit 1; fi
 	uv run harness paper "$(URL)"
 
+review-pr:
+	@if [ -z "$(DIFF)" ]; then echo "usage: make review-pr DIFF=path/to/x.diff"; exit 1; fi
+	uv run harness review-pr "$(DIFF)"
+
+jd:
+	@if [ -z "$(JD)" ]; then echo "usage: make jd JD=path/to/jd.txt"; exit 1; fi
+	uv run harness jd "$(JD)"
+
+weekly:
+	uv run harness weekly
+
 install-daily:
 	bash scripts/install_daily.sh install
 

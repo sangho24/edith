@@ -330,6 +330,47 @@ def recall(query: tuple[str, ...], top_k: int) -> None:
 
 
 @main.command()
+@click.argument("diff_path", type=click.Path(exists=True))
+@click.option("--title", default=None)
+def review_pr(diff_path: str, title: str | None) -> None:
+    """PR review (F7) — heuristic 1차 리뷰."""
+    from harness.integrations.github_pr import LocalPRSource, review
+
+    src = LocalPRSource(Path(diff_path), title_str=title or Path(diff_path).stem)
+    r = review(src)
+    click.echo(r.render_text())
+
+
+@main.command()
+@click.argument("jd_file", type=click.Path(exists=True))
+def jd(jd_file: str) -> None:
+    """JD analyzer (F9) — JD 파일 vs raw/career/resume.md."""
+    from harness.integrations.jd import analyze_jd, load_resume
+
+    home = _edith_home()
+    resume = load_resume(home)
+    if resume is None:
+        click.echo(
+            "error: raw/career/resume.md 없음. 이력서를 markdown 으로 작성해두세요.", err=True
+        )
+        sys.exit(1)
+    jd_text = Path(jd_file).read_text(encoding="utf-8")
+    analysis = analyze_jd(jd_text, resume)
+    click.echo(analysis.render_text())
+
+
+@main.command()
+@click.option("--days", default=7, type=int)
+def weekly(days: int) -> None:
+    """Weekly synthesis (F10) — 지난 N일 trace + compile + wiki 합성."""
+    from harness.weekly import compose_weekly
+
+    home = _edith_home()
+    syn = compose_weekly(home, days=days)
+    click.echo(syn.render_text())
+
+
+@main.command()
 @click.argument("arxiv_input")
 def paper(arxiv_input: str) -> None:
     """Paper triage (F8) — arxiv URL/ID → 메타데이터 + wiki summary path 제안."""
