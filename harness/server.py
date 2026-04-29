@@ -21,6 +21,16 @@ import os
 from pathlib import Path
 from typing import Any
 
+# .env 자동 로드 — uvicorn 직접 실행 시 'source .env' 안 해도 동작.
+try:
+    from dotenv import load_dotenv
+
+    _env_path = Path(__file__).resolve().parent.parent / ".env"
+    if _env_path.exists():
+        load_dotenv(_env_path, override=False)
+except ImportError:
+    pass
+
 try:
     from fastapi import FastAPI, Header, HTTPException, Request
     from fastapi.responses import JSONResponse
@@ -52,6 +62,18 @@ def make_app(
     # ⚠️ 명시적 None 체크 — secret="" 은 dev 모드 의도. env leak 방지.
     if secret is None:
         secret = os.environ.get("RELAY_SECRET", "")
+
+    # PR #15.1 — TelegramClient 자동 wiring (TELEGRAM_BOT_TOKEN 있으면)
+    if telegram_client is None:
+        token = os.environ.get("TELEGRAM_BOT_TOKEN")
+        if token:
+            from harness.integrations.telegram import TelegramClient
+
+            chat_id_str = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+            allowed: set[int] | None = (
+                {int(chat_id_str)} if chat_id_str.isdigit() else None
+            )
+            telegram_client = TelegramClient(token=token, allowed_chat_ids=allowed)
 
     app = FastAPI(title="Edith Home Hub Server")
 
@@ -110,17 +132,26 @@ def make_app(
         request: Request,
         x_relay_signature: str | None = Header(default=None),
     ) -> JSONResponse:
-        """Telegram update payload (relay 통해 forward 된 것) 처리.
+        """Telegram update payload 처리.
+
+        인증 두 가지 path:
+        1. Telegram 직접 (Funnel/Tunnel 통해) —
+           X-Telegram-Bot-Api-Secret-Token 헤더 (단순 토큰 비교)
+        2. VPS relay 경유 — X-Relay-Signature 헤더 (HMAC-SHA256 검증)
 
         흐름:
-        1. HMAC 검증
+        1. 인증
         2. update parse → chat_id, text
         3. text 를 task 로 runtime.run() (또는 큐잉)
         4. 결과를 sendMessage 로 답신
         """
         body = await request.body()
-        if secret and not _verify_signature(body, x_relay_signature, secret):
-            raise HTTPException(status_code=401, detail="invalid signature")
+        tg_secret_token = request.headers.get("x-telegram-bot-api-secret-token")
+        if secret:
+            valid_tg = tg_secret_token == secret
+            valid_hmac = _verify_signature(body, x_relay_signature, secret)
+            if not (valid_tg or valid_hmac):
+                raise HTTPException(status_code=401, detail="invalid signature")
 
         try:
             payload = await request.json()

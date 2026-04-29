@@ -21,6 +21,14 @@ except ImportError:
 SECRET = "test-secret-server"
 
 
+@pytest.fixture(autouse=True)
+def _isolate_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """server make_app 의 auto-wire 가 사용자 .env 에 leak 되지 않게."""
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    monkeypatch.delenv("TELEGRAM_CHAT_ID", raising=False)
+    monkeypatch.delenv("RELAY_SECRET", raising=False)
+
+
 def _sign(body: bytes, secret: str = SECRET) -> str:
     return "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
 
@@ -201,6 +209,40 @@ def test_telegram_webhook_invalid_signature(tmp_path: Path) -> None:
         "/webhook/telegram",
         json={"update_id": 1},
         headers={"X-Relay-Signature": "sha256=bad"},
+    )
+    assert resp.status_code == 401
+
+
+def test_telegram_webhook_accepts_telegram_secret_token(tmp_path: Path) -> None:
+    """Telegram 의 X-Telegram-Bot-Api-Secret-Token 헤더로 인증."""
+    fake_tg = FakeTelegramClient()
+    app = make_app(
+        edith_home=tmp_path,
+        secret=SECRET,
+        runner=_fake_run,
+        telegram_client=fake_tg,
+    )
+    client = TestClient(app)
+    payload = {
+        "update_id": 1,
+        "message": {"chat": {"id": 1}, "text": "hi"},
+    }
+    resp = client.post(
+        "/webhook/telegram",
+        json=payload,
+        headers={"X-Telegram-Bot-Api-Secret-Token": SECRET},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["answered"]
+
+
+def test_telegram_webhook_wrong_telegram_token_rejected(tmp_path: Path) -> None:
+    app = make_app(edith_home=tmp_path, secret=SECRET, telegram_client=FakeTelegramClient())
+    client = TestClient(app)
+    resp = client.post(
+        "/webhook/telegram",
+        json={"update_id": 1},
+        headers={"X-Telegram-Bot-Api-Secret-Token": "wrong-token"},
     )
     assert resp.status_code == 401
 
