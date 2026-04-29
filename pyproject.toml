@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "anthropic>=0.40.0",
+    "openai>=1.50.0",       # xAI Grok (OpenAI SDK 호환)
     "pydantic>=2.9.0",
     "click>=8.1.7",
     "python-dotenv>=1.0.0",
@@ -26,6 +27,16 @@ relay = [
     # 운영용 (VPS에 deploy 시) — 본체엔 불필요
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
+]
+mac = [
+    # macOS Edith 본체 운영용 — Apple Calendar (EventKit)
+    'pyobjc-framework-EventKit>=11.0; sys_platform == "darwin"',
+]
+google = [
+    # Gmail · Calendar API — F2/F3 실제 OAuth flow 시
+    "google-auth>=2.35.0",
+    "google-auth-oauthlib>=1.2.0",
+    "google-api-python-client>=2.150.0",
 ]
 
 [project.scripts]

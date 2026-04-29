@@ -57,6 +57,35 @@ def make_app(
     def health() -> dict:
         return {"ok": True, "secret_configured": bool(secret), "hub_configured": bool(home_hub_url)}
 
+    # ⚠️ /webhook/telegram 은 /webhook/{source} 보다 먼저 등록해야 함 (FastAPI 는 매칭 순서대로).
+    @app.post("/webhook/telegram")
+    async def telegram_webhook(request: Request) -> JSONResponse:
+        """Telegram webhook 진입점.
+
+        Telegram setWebhook 시 등록한 secret_token 을 'X-Telegram-Bot-Api-Secret-Token'
+        헤더로 보내옴. 우리는 RELAY_SECRET 을 그대로 쓰고 비교 검증.
+        그 후 home hub 로 forward.
+        """
+        secret_token = request.headers.get("x-telegram-bot-api-secret-token")
+        if secret and secret != secret_token:
+            raise HTTPException(status_code=401, detail="invalid secret_token")
+        try:
+            payload = await request.json()
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"invalid json: {e}") from e
+
+        if forward_fn:
+            forward_fn("telegram", payload)
+            return JSONResponse({"ok": True, "forwarded": True})
+
+        return JSONResponse(
+            {
+                "ok": True,
+                "forwarded": False,
+                "note": "forward_fn 미설정 — telegram payload 큐잉 안 됨",
+            }
+        )
+
     @app.post("/webhook/{source}")
     async def webhook(
         source: str,

@@ -175,3 +175,52 @@ def test_oauth_callback_forwards_params() -> None:
     assert resp.json()["provider"] == "google"
     assert captured["oauth_google"]["code"] == "abc123"
     assert captured["oauth_google"]["state"] == "xyz"
+
+
+# ── /webhook/telegram (PR #15) ──
+
+
+def test_telegram_webhook_forwards_with_secret_token() -> None:
+    """Telegram setWebhook 시 등록한 secret_token 헤더 검증 + forward."""
+    captured: list[tuple[str, dict]] = []
+
+    def fake_forward(source: str, payload: dict) -> None:
+        captured.append((source, payload))
+
+    app = make_app(secret=SECRET, forward_fn=fake_forward)
+    client = TestClient(app)
+
+    payload = {
+        "update_id": 1,
+        "message": {"chat": {"id": 100}, "text": "hi"},
+    }
+    resp = client.post(
+        "/webhook/telegram",
+        json=payload,
+        headers={"X-Telegram-Bot-Api-Secret-Token": SECRET},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["forwarded"]
+    assert captured[0][0] == "telegram"
+    assert captured[0][1]["update_id"] == 1
+
+
+def test_telegram_webhook_invalid_secret_rejected() -> None:
+    app = make_app(secret=SECRET, forward_fn=lambda s, p: None)
+    client = TestClient(app)
+    resp = client.post(
+        "/webhook/telegram",
+        json={"update_id": 1},
+        headers={"X-Telegram-Bot-Api-Secret-Token": "wrong"},
+    )
+    assert resp.status_code == 401
+
+
+def test_telegram_webhook_no_secret_skips_check() -> None:
+    """secret 미설정 (dev) 이면 secret_token 검증 skip."""
+    captured: list = []
+    app = make_app(secret="", forward_fn=lambda s, p: captured.append((s, p)))
+    client = TestClient(app)
+    resp = client.post("/webhook/telegram", json={"update_id": 1})
+    assert resp.status_code == 200
+    assert captured[0][0] == "telegram"
