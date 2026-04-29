@@ -32,8 +32,11 @@ class CalendarEvent:
         return int((self.end - self.start).total_seconds() / 60)
 
     def to_summary(self) -> str:
-        s = self.start.strftime("%H:%M")
-        e = self.end.strftime("%H:%M")
+        # UTC-aware datetime 이면 local 로 변환해서 표시 (사용자 시점 시간).
+        s_dt = self.start.astimezone() if self.start.tzinfo else self.start
+        e_dt = self.end.astimezone() if self.end.tzinfo else self.end
+        s = s_dt.strftime("%H:%M")
+        e = e_dt.strftime("%H:%M")
         return f"{s}-{e} {self.title}"
 
 
@@ -137,6 +140,32 @@ class EventKitCalendarSource(CalendarSource):
                     )
                 )
         return out
+
+
+def select_source(
+    edith_home: Path | None = None,
+    fixture_path: Path | None = None,
+) -> CalendarSource:
+    """OS·환경에 따라 적절한 CalendarSource 선택.
+
+    우선순위:
+    1. fixture_path 명시 → LocalCalendarSource (테스트/시연 override)
+    2. macOS + pyobjc-framework-EventKit → EventKitCalendarSource
+    3. fallback → LocalCalendarSource(edith_home/raw/calendar/events.json)
+    """
+    import sys
+
+    if fixture_path is not None:
+        return LocalCalendarSource(fixture_path)
+
+    if sys.platform == "darwin":
+        try:
+            return EventKitCalendarSource()
+        except RuntimeError:
+            pass
+
+    home = edith_home or Path.home() / "edith"
+    return LocalCalendarSource(home / "raw" / "calendar" / "events.json")
 
 
 def today_view(source: CalendarSource) -> dict:

@@ -1,46 +1,24 @@
 """calendar_today tool — F2 LLM 통합.
 
-Source 선택 우선순위:
-1. EDITH_CALENDAR_FIXTURE env 설정 시 → LocalCalendarSource (test/dev override)
-2. macOS + pyobjc-framework-EventKit 설치 → EventKitCalendarSource (PR #16)
-3. fallback → LocalCalendarSource (raw/calendar/events.json)
+source 선택은 harness.calendar.select_source 헬퍼에 위임 (CLI/Tool 통일).
 """
 
 from __future__ import annotations
 
 import os
-import sys
 from pathlib import Path
 from typing import Any
 
-from harness.calendar import (
-    EventKitCalendarSource,
-    LocalCalendarSource,
-    today_view,
-)
+from harness.calendar import select_source, today_view
 from harness.state import Context
 from harness.tools import Tool
 
 
 def _calendar_today(args: dict[str, Any], ctx: Context) -> dict[str, Any]:
     fixture_path_env = os.environ.get("EDITH_CALENDAR_FIXTURE")
-    if fixture_path_env:
-        # 명시적 fixture 우선 (테스트 환경 / 시연용 데이터)
-        source = LocalCalendarSource(Path(fixture_path_env))
-        return today_view(source)
-
-    if sys.platform == "darwin":
-        # macOS — Apple Calendar (EventKit) 우선 시도
-        try:
-            ek_source = EventKitCalendarSource()
-            return today_view(ek_source)
-        except RuntimeError:
-            # pyobjc 미설치 또는 권한 거부 → fallback
-            pass
-
-    # 기본 fallback: raw/calendar/events.json
-    fallback = LocalCalendarSource(ctx.edith_home / "raw" / "calendar" / "events.json")
-    return today_view(fallback)
+    fixture_path = Path(fixture_path_env) if fixture_path_env else None
+    source = select_source(edith_home=ctx.edith_home, fixture_path=fixture_path)
+    return today_view(source)
 
 
 CALENDAR_TODAY = Tool(

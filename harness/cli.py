@@ -188,12 +188,14 @@ def cap(text: tuple[str, ...], scope: str | None, source: str, via_llm: bool) ->
     help="events.json 경로 (default: $EDITH_HOME/raw/calendar/events.json)",
 )
 def today(fixture: str | None) -> None:
-    """오늘 캘린더 일정 (Phase 3 F2)."""
-    from harness.calendar import LocalCalendarSource, render_today, today_view
+    """오늘 캘린더 일정 (F2). macOS면 Apple Calendar 직읽음."""
+    from harness.calendar import render_today, select_source, today_view
 
     home = _edith_home()
-    fixture_path = Path(fixture) if fixture else home / "raw" / "calendar" / "events.json"
-    source = LocalCalendarSource(fixture_path)
+    source = select_source(
+        edith_home=home,
+        fixture_path=Path(fixture) if fixture else None,
+    )
     view = today_view(source)
     click.echo(render_today(view))
 

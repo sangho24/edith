@@ -11,6 +11,16 @@ import pytest
 from harness.morning import _build_top3, compose_brief
 
 
+@pytest.fixture(autouse=True)
+def _force_local_calendar_fixture(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """모든 morning 테스트는 fixture 기반 (EventKit 호출 X)."""
+    monkeypatch.setenv(
+        "EDITH_CALENDAR_FIXTURE", str(tmp_path / "raw" / "calendar" / "events.json")
+    )
+
+
 @pytest.fixture
 def edith_home(tmp_path: Path) -> Path:
     (tmp_path / "raw" / "calendar").mkdir(parents=True)

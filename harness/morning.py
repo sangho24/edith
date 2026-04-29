@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
-from harness.calendar import LocalCalendarSource, today_view
+from harness.calendar import select_source, today_view
 from harness.integrations.ds_digest import LocalDigestSource
 from harness.mail import LocalMessageSource, triage
 
@@ -115,12 +115,13 @@ def compose_brief(edith_home: Path) -> MorningBrief:
     today_str = datetime.now(UTC).strftime("%Y-%m-%d (%a)")
     brief = MorningBrief(today_str=today_str)
 
-    # 1. 일정
-    cal_path = Path(
-        os.environ.get("EDITH_CALENDAR_FIXTURE")
-        or (edith_home / "raw" / "calendar" / "events.json")
+    # 1. 일정 — macOS 면 EventKit, 아니면 LocalCalendarSource (fixture/json)
+    fixture_env = os.environ.get("EDITH_CALENDAR_FIXTURE")
+    cal_source = select_source(
+        edith_home=edith_home,
+        fixture_path=Path(fixture_env) if fixture_env else None,
     )
-    brief.today = today_view(LocalCalendarSource(cal_path))
+    brief.today = today_view(cal_source)
 
     # 2. 메일
     mail_path = Path(

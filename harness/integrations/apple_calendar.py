@@ -85,10 +85,10 @@ class EventKitCalendarSource:
             )
         try:
             # pyobjc 의 EventKit 은 동적 framework 모듈 — 정적 분석기는 심볼 못 봄.
-            from EventKit import (  # pyright: ignore[reportAttributeAccessIssue,reportMissingImports] # noqa: I001
-                EKEntityTypeEvent,
-                EKEventStore,
-            )
+            import EventKit  # pyright: ignore[reportMissingImports]
+
+            EKEntityTypeEvent = EventKit.EKEntityTypeEvent  # pyright: ignore[reportAttributeAccessIssue]
+            EKEventStore = EventKit.EKEventStore  # pyright: ignore[reportAttributeAccessIssue]
         except ImportError as e:
             raise RuntimeError(
                 "pyobjc-framework-EventKit 필요. uv pip install pyobjc-framework-EventKit"

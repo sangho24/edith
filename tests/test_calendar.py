@@ -152,6 +152,20 @@ def test_render_today_with_events(events_file: Path) -> None:
 
 
 def test_calendar_event_duration() -> None:
+    # naive datetime 사용 — tzinfo 없으면 to_summary 가 그대로 출력 (변환 X).
+    ev = CalendarEvent(
+        id="x",
+        title="t",
+        start=datetime(2026, 4, 28, 10, 0),
+        end=datetime(2026, 4, 28, 11, 30),
+        attendees=[],
+    )
+    assert ev.duration_minutes() == 90
+    assert "10:00-11:30 t" == ev.to_summary()
+
+
+def test_calendar_event_to_summary_utc_aware_converts_to_local() -> None:
+    """UTC-aware datetime 은 사용자 local 시간으로 변환 표시."""
     ev = CalendarEvent(
         id="x",
         title="t",
@@ -159,8 +173,12 @@ def test_calendar_event_duration() -> None:
         end=datetime(2026, 4, 28, 11, 30, tzinfo=UTC),
         attendees=[],
     )
+    summary = ev.to_summary()
+    # local TZ 에 따라 시간 다름 — 형식만 검증
+    assert "-" in summary
+    assert summary.endswith(" t")
+    # 90분 차이 유지
     assert ev.duration_minutes() == 90
-    assert "10:00-11:30 t" == ev.to_summary()
 
 
 def test_local_source_handles_corrupt_json(events_file: Path) -> None:
