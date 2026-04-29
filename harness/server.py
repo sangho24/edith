@@ -49,7 +49,9 @@ def make_app(
     telegram_client: TelegramClient 인스턴스. None 이면 webhook 응답만 큐잉.
     """
     home = edith_home or Path(os.environ.get("EDITH_HOME", str(Path.home() / "edith")))
-    secret = secret or os.environ.get("RELAY_SECRET", "")
+    # ⚠️ 명시적 None 체크 — secret="" 은 dev 모드 의도. env leak 방지.
+    if secret is None:
+        secret = os.environ.get("RELAY_SECRET", "")
 
     app = FastAPI(title="Edith Home Hub Server")
 

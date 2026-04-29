@@ -48,8 +48,12 @@ def make_app(
     forward_fn: webhook 받은 후 home hub로 보낼 함수 (test 시 mock).
                 None이면 RELAY_FORWARD_TARGET env로 HTTP POST.
     """
-    secret = secret or os.environ.get("RELAY_SECRET", "")
-    home_hub_url = home_hub_url or os.environ.get("HOME_HUB_URL", "")
+    # ⚠️ 명시적 None 체크 — secret="" 은 dev 모드 (검증 skip) 의도이므로
+    # `or` 로 env fallback 하면 사용자 환경에서 RELAY_SECRET 이 leak 됨.
+    if secret is None:
+        secret = os.environ.get("RELAY_SECRET", "")
+    if home_hub_url is None:
+        home_hub_url = os.environ.get("HOME_HUB_URL", "")
 
     app = FastAPI(title="Edith VPS Relay")
 

@@ -12,6 +12,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from harness.llm import (
+    GeminiLLM,
     GrokLLM,
     LLMResponse,
     _anthropic_messages_to_openai,
@@ -303,6 +304,54 @@ def test_get_llm_grok(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("XAI_API_KEY", "xai-test")
     llm = get_llm()
     assert llm.__class__.__name__ == "GrokLLM"
+
+
+def test_get_llm_gemini(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("EDITH_LLM", "gemini")
+    monkeypatch.setenv("GEMINI_API_KEY", "AIza-test")
+    llm = get_llm()
+    assert llm.__class__.__name__ == "GeminiLLM"
+
+
+# ── GeminiLLM (xAI 와 동일한 변환 어댑터, base_url 만 다름) ────────────────
+
+
+def test_gemini_llm_end_to_end_with_mock(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GEMINI_API_KEY", "AIza-test")
+
+    gemini = GeminiLLM(model="gemini-2.5-flash")
+    fake_resp = _make_openai_resp(
+        content="안녕하세요 상호님",
+        finish_reason="stop",
+    )
+    gemini.client = MagicMock()
+    gemini.client.chat.completions.create.return_value = fake_resp
+
+    out = gemini.call(
+        messages=[{"role": "user", "content": "안녕"}],
+        tools=[],
+        system="당신은 Edith",
+    )
+    assert out.stop_reason == "end_turn"
+    assert out.text == "안녕하세요 상호님"
+
+    call_kwargs = gemini.client.chat.completions.create.call_args.kwargs
+    assert call_kwargs["model"] == "gemini-2.5-flash"
+
+
+def test_gemini_llm_no_api_key_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
+        GeminiLLM()
+
+
+def test_gemini_llm_uses_correct_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    """OpenAI client 가 Gemini 의 OpenAI 호환 endpoint 로 향하는지."""
+    monkeypatch.setenv("GEMINI_API_KEY", "AIza-test")
+    gemini = GeminiLLM()
+    base_url = str(gemini.client.base_url)
+    assert "generativelanguage.googleapis.com" in base_url
+    assert "/v1beta/openai" in base_url
 
 
 # ── runtime + GrokLLM 통합 (mock client) ───────────────────────────────

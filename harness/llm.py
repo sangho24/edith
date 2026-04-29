@@ -295,20 +295,71 @@ class GrokLLM:
         return _openai_response_to_anthropic(resp)
 
 
+class GeminiLLM:
+    """Google Gemini API 래퍼. OpenAI SDK 호환 엔드포인트 사용.
+
+    무료 tier 가 넉넉 (1,500 req/day · 1M tokens/day).
+    Anthropic-style messages/tools 입력 → OpenAI 형식 변환 → 호출 → 다시 변환.
+
+    GrokLLM 과 거의 동일하지만 base_url, env var, model 만 다름.
+    """
+
+    def __init__(
+        self,
+        model: str | None = None,
+        api_key: str | None = None,
+        base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/",
+    ) -> None:
+        try:
+            from openai import OpenAI
+        except ImportError as e:
+            raise RuntimeError("pip install openai") from e
+
+        key = api_key or os.environ.get("GEMINI_API_KEY")
+        if not key:
+            raise RuntimeError("GEMINI_API_KEY 환경변수 없음. .env 파일 또는 export 필요.")
+        self.model = model or os.environ.get("GEMINI_MODEL_FAST", "gemini-2.5-flash")
+        self.client = OpenAI(api_key=key, base_url=base_url)
+
+    def call(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        system: str,
+    ) -> LLMResponse:
+        oai_messages = _anthropic_messages_to_openai(messages, system)
+        oai_tools = _anthropic_tools_to_openai(tools)
+
+        kwargs: dict[str, Any] = {
+            "model": self.model,
+            "messages": oai_messages,
+            "max_tokens": 4096,
+        }
+        if oai_tools:
+            kwargs["tools"] = oai_tools
+            kwargs["tool_choice"] = "auto"
+
+        resp = self.client.chat.completions.create(**kwargs)
+        return _openai_response_to_anthropic(resp)
+
+
 # ── Factory ─────────────────────────────────────────────────────────────
 
 
-def get_llm() -> AnthropicLLM | GrokLLM | MockLLM:
+def get_llm() -> AnthropicLLM | GeminiLLM | GrokLLM | MockLLM:
     """env 에 따라 적절한 LLM 클라이언트 반환.
 
     EDITH_LLM:
     - "mock"      → MockLLM
+    - "gemini"    → GeminiLLM (Google AI Studio, 무료 tier 넉넉)
     - "grok"      → GrokLLM (xAI)
     - "anthropic" (또는 그 외) → AnthropicLLM (Claude)
     """
     mode = os.environ.get("EDITH_LLM", "anthropic").lower()
     if mode == "mock":
         return MockLLM()
+    if mode == "gemini":
+        return GeminiLLM()
     if mode == "grok":
         return GrokLLM()
     return AnthropicLLM()
