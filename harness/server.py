@@ -31,6 +31,47 @@ try:
 except ImportError:
     pass
 
+
+def _compose_answer(trace: Any) -> str:
+    """trace.output 비었을 때 events 보고 fallback 답변 합성.
+
+    - 정상 종료 + output 있음 → output 그대로
+    - 에러 종료 → 에러 카테고리별 사용자 친화 메시지
+    - tool 호출은 됐는데 텍스트 출력 없음 (Gemini empty completion 패턴) → 액션 요약
+    """
+    if trace.output:
+        return trace.output
+
+    # 에러로 끝났으면 사용자 친화 메시지
+    if trace.finalize_reason == "error":
+        for ev in reversed(trace.events):
+            if ev.kind == "error":
+                msg = ev.payload.get("msg", "알 수 없는 오류")
+                if "429" in msg or "RESOURCE_EXHAUSTED" in msg:
+                    return "⏳ 잠시 후 다시 시도해주세요 (rate limit)"
+                if "503" in msg or "UNAVAILABLE" in msg:
+                    return "⚠️ 서비스 일시 불안정 — 잠시 후 다시 시도해주세요"
+                if "401" in msg or "403" in msg:
+                    return "⚠️ 인증 오류 — 관리자 확인 필요"
+                return f"⚠️ 오류: {msg[:200]}"
+        return "⚠️ 처리 중 오류 발생"
+
+    # tool 호출 있었으면 액션 요약
+    actions = [ev for ev in trace.events if ev.kind == "action"]
+    if actions:
+        names = [ev.payload.get("tool", "?") for ev in actions]
+        unique_names = list(dict.fromkeys(names))  # 순서 보존 dedup
+        if "capture_text" in unique_names:
+            return "✓ 메모로 저장됐습니다."
+        if "wiki_write" in unique_names:
+            return "✓ wiki 업데이트됐습니다."
+        return f"✓ 처리 완료 ({', '.join(unique_names)})"
+
+    if trace.finalize_reason in ("budget_tokens", "budget_steps", "budget_time"):
+        return "⏱ 예산 한도 도달 — 더 짧게 다시 물어봐주세요"
+
+    return "(응답 없음 — 다시 시도해주세요)"
+
 try:
     from fastapi import FastAPI, Header, HTTPException, Request
     from fastapi.responses import JSONResponse
@@ -185,7 +226,7 @@ def make_app(
 
         try:
             trace = run_fn(update.text, edith_home=home)
-            answer = trace.output or "(응답 없음)"
+            answer = _compose_answer(trace)
             telegram_client.send_message(update.chat_id, answer)
             return JSONResponse(
                 {"ok": True, "trace_id": trace.id, "answered": True}

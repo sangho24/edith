@@ -121,6 +121,23 @@ uninstall-daily:
 test-daily:
 	bash scripts/install_daily.sh test
 
+# ── PR #18 — server.py LaunchAgent (부팅 시 자동 시작) ──
+
+server-install:
+	bash scripts/launchd/install.sh install
+
+server-uninstall:
+	bash scripts/launchd/install.sh uninstall
+
+server-restart:
+	bash scripts/launchd/install.sh restart
+
+server-status:
+	bash scripts/launchd/install.sh status
+
+server-logs:
+	bash scripts/launchd/install.sh logs
+
 check: lint typecheck test
 	@echo ""
 	@echo "✓ all checks passed"

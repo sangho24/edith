@@ -9,6 +9,16 @@ from typing import cast
 
 import click
 
+# .env 자동 로드 — `source .env` 안 해도 EDITH_LLM, XAI_API_KEY 등 사용.
+try:
+    from dotenv import load_dotenv
+
+    _env_path = Path(__file__).resolve().parent.parent / ".env"
+    if _env_path.exists():
+        load_dotenv(_env_path, override=False)
+except ImportError:
+    pass
+
 from harness.state import Scope
 
 

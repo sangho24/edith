@@ -309,6 +309,7 @@ class GeminiLLM:
         model: str | None = None,
         api_key: str | None = None,
         base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/",
+        max_retries: int = 5,
     ) -> None:
         try:
             from openai import OpenAI
@@ -319,7 +320,9 @@ class GeminiLLM:
         if not key:
             raise RuntimeError("GEMINI_API_KEY 환경변수 없음. .env 파일 또는 export 필요.")
         self.model = model or os.environ.get("GEMINI_MODEL_FAST", "gemini-2.5-flash")
-        self.client = OpenAI(api_key=key, base_url=base_url)
+        # max_retries 5 — Gemini Free tier 의 5 RPM 한도 자동 처리.
+        # OpenAI SDK 가 retry-after 헤더 honor 하면서 exponential backoff.
+        self.client = OpenAI(api_key=key, base_url=base_url, max_retries=max_retries)
 
     def call(
         self,

@@ -247,6 +247,96 @@ def test_telegram_webhook_wrong_telegram_token_rejected(tmp_path: Path) -> None:
     assert resp.status_code == 401
 
 
+# ── PR #18 — _compose_answer fallback 로직 ──
+
+
+def _make_trace(
+    output: str | None = None,
+    finalize_reason: str | None = None,
+    events: list | None = None,
+) -> Any:
+    """fake Trace mock — minimal duck-typed object for _compose_answer."""
+    from dataclasses import dataclass, field
+
+    from harness.state import Event
+
+    @dataclass
+    class FakeTrace:
+        output: str | None = None
+        finalize_reason: str | None = None
+        events: list[Event] = field(default_factory=list)
+
+    return FakeTrace(
+        output=output,
+        finalize_reason=finalize_reason,
+        events=[Event(t=evt[0], kind=evt[1], payload=evt[2]) for evt in (events or [])],
+    )
+
+
+def test_compose_answer_uses_output_if_present() -> None:
+    from harness.server import _compose_answer
+
+    trace = _make_trace(output="안녕하세요", finalize_reason="end_turn")
+    assert _compose_answer(trace) == "안녕하세요"
+
+
+def test_compose_answer_429_friendly_message() -> None:
+    from harness.server import _compose_answer
+
+    trace = _make_trace(
+        output="",
+        finalize_reason="error",
+        events=[(0.0, "error", {"msg": "Error code: 429 - RESOURCE_EXHAUSTED ..."})],
+    )
+    out = _compose_answer(trace)
+    assert "rate limit" in out
+    assert "잠시 후" in out
+
+
+def test_compose_answer_503_friendly_message() -> None:
+    from harness.server import _compose_answer
+
+    trace = _make_trace(
+        output="",
+        finalize_reason="error",
+        events=[(0.0, "error", {"msg": "Error code: 503 - UNAVAILABLE"})],
+    )
+    out = _compose_answer(trace)
+    assert "일시 불안정" in out
+
+
+def test_compose_answer_summarizes_capture_text_action() -> None:
+    """tool 호출 후 텍스트 출력 없는 Gemini empty completion 패턴."""
+    from harness.server import _compose_answer
+
+    trace = _make_trace(
+        output="",
+        finalize_reason="end_turn",
+        events=[
+            (0.0, "action", {"tool": "capture_text", "args": {"text": "x"}}),
+            (0.5, "observation", {"tool": "capture_text", "result": "ok"}),
+        ],
+    )
+    out = _compose_answer(trace)
+    assert "메모" in out
+
+
+def test_compose_answer_budget_friendly_message() -> None:
+    from harness.server import _compose_answer
+
+    trace = _make_trace(output="", finalize_reason="budget_steps")
+    out = _compose_answer(trace)
+    assert "예산" in out or "한도" in out
+
+
+def test_compose_answer_fallback_when_nothing() -> None:
+    from harness.server import _compose_answer
+
+    trace = _make_trace(output="", finalize_reason=None)
+    out = _compose_answer(trace)
+    assert "응답" in out
+
+
 def test_telegram_webhook_no_client_skips(tmp_path: Path) -> None:
     """telegram_client 미설정 → payload 받기만 하고 skip."""
     app = make_app(edith_home=tmp_path, secret=SECRET, runner=_fake_run)
