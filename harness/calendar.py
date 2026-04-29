@@ -1,7 +1,8 @@
 """Phase 3 F2 — Calendar Collector + today view.
 
 CalendarSource ABC + LocalCalendarSource (JSON fixture, dev/test) +
-GoogleCalendarSource (placeholder, F2.x에서 OAuth 후 활성화).
+GoogleCalendarSource (placeholder, F2.x에서 OAuth 후 활성화) +
+EventKitCalendarSource (PR #16, macOS Apple Calendar).
 
 today_view(source) → 오늘 일정 list + busy minutes 합계.
 """
@@ -13,6 +14,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
 from pathlib import Path
+from typing import Any
 
 
 @dataclass
@@ -93,6 +95,48 @@ class GoogleCalendarSource(CalendarSource):
                 f"F2.x: `harness oauth google` 명령으로 설정 예정."
             )
         raise NotImplementedError("F2.x에서 google-api-python-client 통합")
+
+
+class EventKitCalendarSource(CalendarSource):
+    """PR #16 — macOS EventKit 어댑터 (Apple Calendar 직읽음).
+
+    harness.integrations.apple_calendar.EventKitCalendarSource (raw) 의 결과를
+    F2 CalendarEvent 형식으로 변환. raw 는 naive local datetime → UTC-aware 로 정규화.
+    """
+
+    def __init__(self, _raw_source: Any | None = None) -> None:
+        if _raw_source is not None:
+            # 테스트 시 mock 주입
+            self._raw = _raw_source
+            return
+        from harness.integrations.apple_calendar import (
+            EventKitCalendarSource as _RawEventKit,
+        )
+        self._raw = _RawEventKit()
+
+    def list_events(self, start: datetime, end: datetime) -> list[CalendarEvent]:
+        # raw 의 range 는 date 단위. day-level 로 확장.
+        raw_events = self._raw.range(start.date(), end.date())
+        out: list[CalendarEvent] = []
+        local_tz = datetime.now().astimezone().tzinfo
+        for idx, raw in enumerate(raw_events):
+            # raw.start/end 는 naive local datetime → local TZ 부여 → UTC 변환
+            ev_start = raw.start.replace(tzinfo=local_tz).astimezone(UTC)
+            ev_end = raw.end.replace(tzinfo=local_tz).astimezone(UTC)
+            if start <= ev_start < end:
+                out.append(
+                    CalendarEvent(
+                        id=f"ek_{idx}_{int(ev_start.timestamp())}",
+                        title=raw.title,
+                        start=ev_start,
+                        end=ev_end,
+                        attendees=[],
+                        description=getattr(raw, "notes", None) or None,
+                        location=getattr(raw, "location", None) or None,
+                        url=None,
+                    )
+                )
+        return out
 
 
 def today_view(source: CalendarSource) -> dict:

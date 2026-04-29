@@ -84,7 +84,8 @@ class EventKitCalendarSource:
                 "EventKitCalendarSource 는 macOS 전용. 다른 OS 면 ICloudCalDAVSource 사용."
             )
         try:
-            from EventKit import (  # type: ignore[import-not-found]
+            # pyobjc 의 EventKit 은 동적 framework 모듈 — 정적 분석기는 심볼 못 봄.
+            from EventKit import (  # pyright: ignore[reportAttributeAccessIssue,reportMissingImports] # noqa: I001
                 EKEntityTypeEvent,
                 EKEventStore,
             )

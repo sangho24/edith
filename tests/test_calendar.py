@@ -169,6 +169,104 @@ def test_local_source_handles_corrupt_json(events_file: Path) -> None:
     assert src.today() == []
 
 
+# ── EventKitCalendarSource (PR #16) — mock raw source 로 검증 ───────────
+
+
+class _FakeRawEKEvent:
+    """harness.integrations.apple_calendar.CalendarEvent 와 같은 attribute."""
+
+    def __init__(
+        self,
+        title: str,
+        start: datetime,
+        end: datetime,
+        location: str = "",
+        notes: str = "",
+        calendar_name: str = "",
+    ) -> None:
+        self.title = title
+        self.start = start
+        self.end = end
+        self.location = location
+        self.notes = notes
+        self.calendar_name = calendar_name
+
+
+class _FakeRawEKSource:
+    """raw EventKitCalendarSource 의 mock — list_events 대신 range() 반환."""
+
+    def __init__(self, events: list[_FakeRawEKEvent]) -> None:
+        self._events = events
+
+    def range(self, start_date, end_date):  # type: ignore[no-untyped-def]
+        return [e for e in self._events if start_date <= e.start.date() <= end_date]
+
+
+def test_eventkit_adapter_basic_conversion() -> None:
+    """EventKit raw event → F2 CalendarEvent 변환 + UTC 정규화."""
+    from harness.calendar import EventKitCalendarSource
+
+    today = datetime.now().date()
+    raw = [
+        _FakeRawEKEvent(
+            title="디자인 리뷰",
+            start=datetime.combine(today, time(10, 0)),  # naive local 10:00
+            end=datetime.combine(today, time(11, 0)),
+            location="회의실 A",
+            notes="아젠다: ...",
+        ),
+    ]
+    src = EventKitCalendarSource(_raw_source=_FakeRawEKSource(raw))
+
+    # F2 CalendarSource.today() 가 UTC 범위로 호출
+    events = src.today()
+    # local 10am 이 UTC 인터벌에 떨어지면 1개, 아니면 0개 (TZ 의존)
+    # KST 의 경우 10am KST = 01:00 UTC → UTC 오늘 [00, 24) 안에 있음 → 1개
+    if events:
+        assert events[0].title == "디자인 리뷰"
+        assert events[0].location == "회의실 A"
+        assert events[0].description == "아젠다: ..."
+        # UTC-aware 인지 확인
+        assert events[0].start.tzinfo is not None
+        # ID 는 ek_ 로 시작
+        assert events[0].id.startswith("ek_")
+
+
+def test_eventkit_adapter_excludes_outside_range() -> None:
+    from harness.calendar import EventKitCalendarSource
+
+    today = datetime.now().date()
+    far_past = datetime.combine(today - timedelta(days=10), time(10, 0))
+    far_future = datetime.combine(today + timedelta(days=10), time(10, 0))
+    raw = [
+        _FakeRawEKEvent("과거", far_past, far_past + timedelta(hours=1)),
+        _FakeRawEKEvent("미래", far_future, far_future + timedelta(hours=1)),
+    ]
+    src = EventKitCalendarSource(_raw_source=_FakeRawEKSource(raw))
+    events = src.today()
+    assert events == []
+
+
+def test_eventkit_adapter_handles_missing_optional_fields() -> None:
+    from harness.calendar import EventKitCalendarSource
+
+    today = datetime.now().date()
+    # location / notes 없는 raw event
+    raw = [
+        _FakeRawEKEvent(
+            title="간단",
+            start=datetime.combine(today, time(12, 0)),
+            end=datetime.combine(today, time(13, 0)),
+        ),
+    ]
+    src = EventKitCalendarSource(_raw_source=_FakeRawEKSource(raw))
+    events = src.today()
+    if events:
+        assert events[0].title == "간단"
+        assert events[0].location is None
+        assert events[0].description is None
+
+
 def test_google_source_raises_when_unconfigured(tmp_path: Path) -> None:
     src = GoogleCalendarSource(token_path=tmp_path / "missing.json")
     with pytest.raises(RuntimeError) as exc:
