@@ -200,6 +200,40 @@ def test_telegram_webhook_start_command(tmp_path: Path) -> None:
     assert resp.status_code == 200
     assert resp.json()["command"] == "start"
     assert "안녕하세요" in fake_tg.sent[0][1]
+    # /start 안내 → /help 가이드 포함
+    assert "/help" in fake_tg.sent[0][1]
+
+
+def test_telegram_webhook_help_command(tmp_path: Path) -> None:
+    """/help 메시지에 17 tools 카테고리 다 보임."""
+    fake_tg = FakeTelegramClient()
+    app = make_app(
+        edith_home=tmp_path,
+        secret=SECRET,
+        runner=_fake_run,
+        telegram_client=fake_tg,
+    )
+    client = TestClient(app)
+
+    payload = {
+        "update_id": 1,
+        "message": {"chat": {"id": 1}, "text": "/help"},
+    }
+    body = json.dumps(payload).encode()
+    resp = client.post(
+        "/webhook/telegram",
+        content=body,
+        headers={"X-Relay-Signature": _sign(body)},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["command"] == "help"
+
+    help_msg = fake_tg.sent[0][1]
+    # 핵심 카테고리 모두 포함
+    for keyword in ["일정", "메모", "wiki", "검색", "arxiv", "trace"]:
+        assert keyword in help_msg, f"'{keyword}' missing in /help"
+    # Telegram 4096 자 한도 내
+    assert len(help_msg) < 4096
 
 
 def test_telegram_webhook_invalid_signature(tmp_path: Path) -> None:

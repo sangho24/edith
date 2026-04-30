@@ -32,6 +32,47 @@ except ImportError:
     pass
 
 
+HELP_TEXT = """🤖 Edith — 개인 비서
+
+💬 자연어로 질문/요청하세요. 적절한 도구를 자동으로 호출합니다.
+
+📋 명령어
+/start — 인사
+/help  — 이 도움말
+
+📚 할 수 있는 일 (예시)
+
+📅 일정·메일·digest
+• "오늘 일정?" — Apple Calendar 직읽음
+• "새 메일 정리해줘" — Gmail (OAuth 후)
+• "ds-digest 최신" — 큐레이션 결과
+
+📝 메모·wiki
+• "메모: <내용>" — raw/captures 에 저장
+• "wiki/INDEX 보여줘" — wiki 페이지 read
+• "X 페이지 만들어줘" — wiki 새 페이지 (frontmatter 자동)
+
+🔍 검색·회상
+• "X 에 대해 알려줘" — memory_recall (wiki + raw)
+• "지난 회의 뭐 했지" — 최근 trace 검색
+
+📰 외부 자료
+• "arxiv.org/abs/2407.xxxxx 정리" — 논문 메타데이터
+• "이 PR 검토" + 링크 — 코드 리뷰
+• "JD: <텍스트>" — 이력서 fit 분석
+
+🚫 외부 쓰기 (정책 R2)
+gmail send, calendar create/edit, github commit
+→ approval queue 거쳐 /yes <id> 로 승인 후 실행 (Phase 4)
+
+📊 trace 기록
+모든 호출은 ~/edith/harness/traces/ 에 JSONL 로.
+
+⚠️ 한도
+Gemini Free 5 RPM. 짧은 시간에 많이 보내면 잠시 대기.
+"""
+
+
 def _compose_answer(trace: Any) -> str:
     """trace.output 비었을 때 events 보고 fallback 답변 합성.
 
@@ -212,9 +253,13 @@ def make_app(
         if update.text.startswith("/start"):
             telegram_client.send_message(
                 update.chat_id,
-                "안녕하세요 — Edith 봇입니다. 질문 보내시면 답변드릴게요.",
+                "안녕하세요 — Edith 봇입니다. /help 로 사용법 확인.",
             )
             return JSONResponse({"ok": True, "command": "start"})
+
+        if update.text.startswith("/help"):
+            telegram_client.send_message(update.chat_id, HELP_TEXT)
+            return JSONResponse({"ok": True, "command": "help"})
 
         # 일반 질문 — runtime 호출
         if runner is None:

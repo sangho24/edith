@@ -346,15 +346,71 @@ class GeminiLLM:
         return _openai_response_to_anthropic(resp)
 
 
+class GroqCloudLLM:
+    """Groq Cloud API 래퍼 (xAI Grok 와 다름 — Llama 3.3 70B 등 free tier 호스팅).
+
+    OpenAI SDK 호환. base_url 만 다름.
+
+    Free tier:
+    - 30 RPM (Gemini Free 5 RPM 의 6배)
+    - 14,400 RPD
+    - Llama 3.3 70B Versatile, Llama 3.1 8B Instant 등
+
+    한국어 quality: Gemini 보다 약간 떨어지지만 일상 사용엔 충분.
+    """
+
+    def __init__(
+        self,
+        model: str | None = None,
+        api_key: str | None = None,
+        base_url: str = "https://api.groq.com/openai/v1",
+        max_retries: int = 5,
+    ) -> None:
+        try:
+            from openai import OpenAI
+        except ImportError as e:
+            raise RuntimeError("pip install openai") from e
+
+        key = api_key or os.environ.get("GROQ_API_KEY")
+        if not key:
+            raise RuntimeError("GROQ_API_KEY 환경변수 없음. .env 파일 또는 export 필요.")
+        self.model = model or os.environ.get(
+            "GROQ_MODEL_FAST", "llama-3.3-70b-versatile"
+        )
+        self.client = OpenAI(api_key=key, base_url=base_url, max_retries=max_retries)
+
+    def call(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        system: str,
+    ) -> LLMResponse:
+        oai_messages = _anthropic_messages_to_openai(messages, system)
+        oai_tools = _anthropic_tools_to_openai(tools)
+
+        kwargs: dict[str, Any] = {
+            "model": self.model,
+            "messages": oai_messages,
+            "max_tokens": 4096,
+        }
+        if oai_tools:
+            kwargs["tools"] = oai_tools
+            kwargs["tool_choice"] = "auto"
+
+        resp = self.client.chat.completions.create(**kwargs)
+        return _openai_response_to_anthropic(resp)
+
+
 # ── Factory ─────────────────────────────────────────────────────────────
 
 
-def get_llm() -> AnthropicLLM | GeminiLLM | GrokLLM | MockLLM:
+def get_llm() -> AnthropicLLM | GeminiLLM | GrokLLM | GroqCloudLLM | MockLLM:
     """env 에 따라 적절한 LLM 클라이언트 반환.
 
     EDITH_LLM:
     - "mock"      → MockLLM
-    - "gemini"    → GeminiLLM (Google AI Studio, 무료 tier 넉넉)
+    - "gemini"    → GeminiLLM (Google AI Studio, 5 RPM free)
+    - "groq"      → GroqCloudLLM (Groq Cloud, 30 RPM free, Llama 3.3 70B)
     - "grok"      → GrokLLM (xAI)
     - "anthropic" (또는 그 외) → AnthropicLLM (Claude)
     """
@@ -363,6 +419,8 @@ def get_llm() -> AnthropicLLM | GeminiLLM | GrokLLM | MockLLM:
         return MockLLM()
     if mode == "gemini":
         return GeminiLLM()
+    if mode == "groq":
+        return GroqCloudLLM()
     if mode == "grok":
         return GrokLLM()
     return AnthropicLLM()

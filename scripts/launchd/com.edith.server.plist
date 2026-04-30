@@ -21,7 +21,7 @@
     <!-- uv run uvicorn harness.server:app -->
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/sangho/.local/bin/uv</string>
+        <string>/opt/homebrew/bin/uv</string>
         <string>run</string>
         <string>--directory</string>
         <string>/Users/sangho/edith</string>

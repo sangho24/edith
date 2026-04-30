@@ -354,6 +354,60 @@ def test_gemini_llm_uses_correct_base_url(monkeypatch: pytest.MonkeyPatch) -> No
     assert "/v1beta/openai" in base_url
 
 
+# ── GroqCloudLLM (Groq Cloud — Llama 3.3 70B free tier) ────────────────
+
+
+def test_get_llm_groq_cloud(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("EDITH_LLM", "groq")
+    monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
+    llm = get_llm()
+    assert llm.__class__.__name__ == "GroqCloudLLM"
+
+
+def test_groq_cloud_llm_no_api_key_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    from harness.llm import GroqCloudLLM
+
+    with pytest.raises(RuntimeError, match="GROQ_API_KEY"):
+        GroqCloudLLM()
+
+
+def test_groq_cloud_llm_uses_correct_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
+    from harness.llm import GroqCloudLLM
+
+    groq = GroqCloudLLM()
+    base_url = str(groq.client.base_url)
+    assert "api.groq.com" in base_url
+
+
+def test_groq_cloud_llm_default_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
+    monkeypatch.delenv("GROQ_MODEL_FAST", raising=False)
+    from harness.llm import GroqCloudLLM
+
+    groq = GroqCloudLLM()
+    assert groq.model == "llama-3.3-70b-versatile"
+
+
+def test_groq_cloud_llm_end_to_end_with_mock(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
+    from harness.llm import GroqCloudLLM
+
+    groq = GroqCloudLLM(model="llama-3.3-70b-versatile")
+    fake_resp = _make_openai_resp(content="안녕하세요", finish_reason="stop")
+    groq.client = MagicMock()
+    groq.client.chat.completions.create.return_value = fake_resp
+
+    out = groq.call(
+        messages=[{"role": "user", "content": "안녕"}], tools=[], system="당신은 Edith"
+    )
+    assert out.stop_reason == "end_turn"
+    assert out.text == "안녕하세요"
+    call_kwargs = groq.client.chat.completions.create.call_args.kwargs
+    assert call_kwargs["model"] == "llama-3.3-70b-versatile"
+
+
 # ── runtime + GrokLLM 통합 (mock client) ───────────────────────────────
 
 

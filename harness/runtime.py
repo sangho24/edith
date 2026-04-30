@@ -11,7 +11,14 @@ from pathlib import Path
 from typing import Any
 
 from harness import policies
-from harness.llm import AnthropicLLM, GeminiLLM, GrokLLM, MockLLM, get_llm
+from harness.llm import (
+    AnthropicLLM,
+    GeminiLLM,
+    GrokLLM,
+    GroqCloudLLM,
+    MockLLM,
+    get_llm,
+)
 from harness.state import Budget, Context, Scope, Trace
 from harness.tools import Registry, build_default_registry
 
@@ -26,7 +33,7 @@ def run(
     scope: Scope = "personal",
     budget: Budget | None = None,
     registry: Registry | None = None,
-    llm: AnthropicLLM | GeminiLLM | GrokLLM | MockLLM | None = None,
+    llm: AnthropicLLM | GeminiLLM | GrokLLM | GroqCloudLLM | MockLLM | None = None,
 ) -> Trace:
     """한 task을 LLM + tools로 실행. 모든 step이 trace에 기록됨."""
     budget = budget or Budget()
