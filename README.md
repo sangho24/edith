@@ -25,15 +25,19 @@
 | `identity.md` | 비서가 누구인지 — 어조·거절 룰·우선순위 |
 | `CLAUDE.md` | 운영 schema — 디렉토리 규칙·답변 양식·compile 절차 |
 
-## Phase 0 demo
+## 실행
 
 ```bash
-echo "테스트 — 오늘 X에 대해 생각함" > raw/captures/$(date +%F)_test.md
-ls raw/captures/
+make install           # uv venv + 의존성
+make serve             # Web GUI + API → http://127.0.0.1:8765
+make check             # CI 풀세트 (lint + typecheck + test)
 ```
 
-이 시점에 LLM은 아직 동작하지 않습니다. 그게 의도된 것입니다.
-**"raw is immutable, wiki is LLM-owned, schema is the config"** 원칙이 layout에 박힌 게 Phase 0의 산출물입니다.
+**Web GUI** (`make serve` 후 브라우저): 채팅으로 Edith에게 질문/요청, ☀️ Brief(오늘 일정·메일·digest·헬스), ✋ Approvals(외부 write 승인 큐), 📊 Traces(실행 기록).
+
+**Telegram**: bot 연결 시 `/start` `/help` `/brief` + 자연어 질문. 진입 토폴로지는 [`docs/03_network_topology.md`](docs/03_network_topology.md).
+
+조작 surface는 GUI(브라우저) · Telegram · CLI(`harness ...`) · iPhone Shortcut 넷 다 같은 runtime을 친다.
 
 ## 빅픽쳐 / 문서
 

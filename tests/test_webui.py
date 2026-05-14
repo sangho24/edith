@@ -99,6 +99,65 @@ def test_ui_traces_lists_summaries(home: Path) -> None:
     assert t["finalize_reason"] == "end_turn"
 
 
+# ── /ui/approvals · /ui/approve ─────────────────────────────────────────
+
+
+def _queue(home: Path) -> Any:
+    from harness.approval import ApprovalQueue
+
+    return ApprovalQueue(home / "harness" / "approvals.json")
+
+
+def test_ui_approvals_empty(home: Path) -> None:
+    client = TestClient(make_app(edith_home=home, secret=SECRET))
+    data = client.get("/ui/approvals").json()
+    assert data["ok"]
+    assert data["approvals"] == []
+
+
+def test_ui_approvals_lists_pending(home: Path) -> None:
+    _queue(home).create(
+        action_type="gmail_send", target_system="gmail",
+        preview="To: x@y.com\n제목: 테스트", risk_score=7, reversible=False,
+    )
+    client = TestClient(make_app(edith_home=home, secret=SECRET))
+    data = client.get("/ui/approvals").json()
+    assert len(data["approvals"]) == 1
+    a = data["approvals"][0]
+    assert a["action_type"] == "gmail_send"
+    assert a["risk_score"] == 7
+    assert a["reversible"] is False
+
+
+def test_ui_approve_yes(home: Path) -> None:
+    req = _queue(home).create("calendar_create", "google_calendar", "일정 생성")
+    client = TestClient(make_app(edith_home=home, secret=SECRET))
+    resp = client.post("/ui/approve", json={"id": req.id, "decision": "yes"})
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "approved"
+    assert _queue(home).get(req.id).status == "approved"
+
+
+def test_ui_approve_no(home: Path) -> None:
+    req = _queue(home).create("gmail_send", "gmail", "메일 발송")
+    client = TestClient(make_app(edith_home=home, secret=SECRET))
+    resp = client.post("/ui/approve", json={"id": req.id, "decision": "no"})
+    assert resp.json()["status"] == "rejected"
+
+
+def test_ui_approve_bad_input(home: Path) -> None:
+    client = TestClient(make_app(edith_home=home, secret=SECRET))
+    assert client.post("/ui/approve", json={"id": "x"}).status_code == 400
+    assert client.post("/ui/approve", json={"decision": "yes"}).status_code == 400
+
+
+def test_ui_approve_unknown_id(home: Path) -> None:
+    client = TestClient(make_app(edith_home=home, secret=SECRET))
+    resp = client.post("/ui/approve", json={"id": "nope12345", "decision": "yes"})
+    assert resp.status_code == 400
+    assert resp.json()["ok"] is False
+
+
 # ── /brief telegram 명령 ────────────────────────────────────────────────
 
 

@@ -1,9 +1,10 @@
-.PHONY: install test run lint fmt typecheck eval check lock help
+.PHONY: install test run serve lint fmt typecheck eval check lock help
 
 help:
 	@echo "make install     # uv venv + 의존성 설치 (editable)"
 	@echo "make test        # mock LLM으로 unit test"
 	@echo "make run TASK=...# 실제 Claude API로 task 실행"
+	@echo "make serve       # Web GUI + API 서버 (http://127.0.0.1:8765)"
 	@echo "make eval        # golden YAML 케이스 일괄 실행 (H4)"
 	@echo "make lint        # ruff check"
 	@echo "make fmt         # ruff format"
@@ -21,6 +22,10 @@ test:
 run:
 	@if [ -z "$(TASK)" ]; then echo "usage: make run TASK=\"task text\""; exit 1; fi
 	uv run harness run "$(TASK)"
+
+serve:
+	@echo "Edith Web GUI → http://127.0.0.1:8765  (Ctrl+C 종료)"
+	uv run uvicorn harness.server:app --host 127.0.0.1 --port 8765
 
 lint:
 	uv run ruff check harness tests scripts

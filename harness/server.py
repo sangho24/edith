@@ -225,6 +225,51 @@ def make_app(
             ],
         }
 
+    def _approval_queue() -> Any:
+        from harness.approval import ApprovalQueue
+
+        return ApprovalQueue(home / "harness" / "approvals.json")
+
+    @app.get("/ui/approvals")
+    def ui_approvals() -> dict[str, Any]:
+        """pending 승인 요청 목록 (GUI Approvals 탭). 만료된 건 먼저 정리."""
+        queue = _approval_queue()
+        queue.expire_old()
+        return {
+            "ok": True,
+            "approvals": [
+                {
+                    "id": r.id,
+                    "action_type": r.action_type,
+                    "target_system": r.target_system,
+                    "preview": r.preview,
+                    "risk_score": r.risk_score,
+                    "reversible": r.reversible,
+                    "requested_at": r.requested_at,
+                    "expires_at": r.expires_at,
+                }
+                for r in queue.list(status="pending")
+            ],
+        }
+
+    @app.post("/ui/approve")
+    async def ui_approve(request: Request) -> JSONResponse:
+        """승인 큐 항목 승인/거절. body: {"id": ..., "decision": "yes"|"no"}."""
+        try:
+            payload = await request.json()
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"invalid json: {e}") from e
+        req_id = payload.get("id", "")
+        decision = payload.get("decision", "")
+        if not req_id or decision not in ("yes", "no"):
+            raise HTTPException(status_code=400, detail="id + decision(yes|no) required")
+        queue = _approval_queue()
+        try:
+            r = queue.approve(req_id) if decision == "yes" else queue.reject(req_id)
+        except (KeyError, ValueError) as e:
+            return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
+        return JSONResponse({"ok": True, "id": r.id, "status": r.status})
+
     @app.post("/ask")
     async def ask(request: Request) -> JSONResponse:
         """단순 query 진입점. iPhone Shortcut / Telegram 등."""
