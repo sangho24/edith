@@ -169,6 +169,27 @@ class GmailSource:
         resp = self._service.users().threads().get(userId="me", id=thread_id).execute()
         return [self._parse(m) for m in resp.get("messages", [])]
 
+    def send_message(self, to: str, subject: str, body: str) -> dict[str, Any]:
+        """메일 발송 (gmail.send scope 필요).
+
+        외부 write — policies.allow()의 R2로 차단되고, request_approval +
+        ApprovalExecutor를 거쳐야만 실행된다. 직접 호출 금지.
+        """
+        import base64
+        from email.message import EmailMessage as _EmailMessage
+
+        mime = _EmailMessage()
+        mime["To"] = to
+        mime["Subject"] = subject
+        mime.set_content(body)
+        raw = base64.urlsafe_b64encode(mime.as_bytes()).decode()
+        return (
+            self._service.users()
+            .messages()
+            .send(userId="me", body={"raw": raw})
+            .execute()
+        )
+
     def _fetch_message(self, msg_id: str) -> MailMessage:
         m = (
             self._service.users()

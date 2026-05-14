@@ -440,7 +440,12 @@ harness/skills/
 | F# | 제목 | Eval (먼저 작성) | 상태 | 의존 |
 |---|---|---|---|---|
 | F13 | **멀티채널 surface** | `harness/integrations/channel.py` — `Channel` Protocol + `IncomingMessage` + `ChannelRegistry`. `TelegramChannel` 어댑터(실 환경) + `MockChannel`(테스트). 채널별 송수신 round-trip 테스트 | ✅ 2026-05-14 | H8 |
-| F16 | **Web GUI** | `harness/webui/index.html` + `server.py` `GET /`·`/ui/brief`·`/ui/traces`. 브라우저 채팅 UI(Chat/Brief/Traces 탭) — Tailscale 내부망에서 Edith 조작. Telegram `/brief` 명령 추가 | ✅ 2026-05-14 | F4·F13 |
+| F16 | **Web GUI** | `harness/webui/index.html` + `server.py` `GET /`·`/ui/brief`·`/ui/traces`·`/ui/approvals`. 브라우저 채팅 UI(Chat/Brief/Approvals/Traces 탭) — Tailscale 내부망에서 Edith 조작. Telegram `/brief` 명령 | ✅ 2026-05-14 | F4·F13 |
+| F17 | **외부 행동 실행** | `harness/executor.py` `ApprovalExecutor` — 승인된 요청을 action_type별 executor로 dispatch. `ApprovalRequest.params`(기계용 인자) 추가, `request_approval` tool 실 구현. executor: `github_workflow_update_cron`(실 검증)·`gmail_send`. GUI/CLI 승인 → 즉시 실행 | ✅ 2026-05-14 | F5·F16 |
+
+> F17로 Edith가 **읽기·답변**을 넘어 **승인 후 외부 행동**까지 — L3 자율성 도달.
+> 단 executor는 `github_workflow_update_cron`·`gmail_send` 둘만 구현. calendar_create·
+> notion_update·slack_send·kakao_send 등은 executor 미등록 (등록 시 "executor 없음" 에러).
 | F14 | **ds-digest skill 확장** | `GitHubPagesDigestSource`(latest.json fetch, fetch 함수 inject), `get_digest_source()` 팩토리. 네트워크·JSON 실패 graceful degrade. golden eval `f14_ds_digest.yaml` | ✅ 2026-05-14 | H8, F4 |
 | F15 | **헬스 데이터 skill** | `apple_health.py` — `AppleHealthExportSource`(export.xml iterparse) + `MockHealthSource` + `daily_summary`. `health_summary` tool, `health` skill(scope=personal). golden eval `f15_health.yaml` | ✅ 2026-05-14 | H8, H5 |
 

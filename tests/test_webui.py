@@ -129,13 +129,39 @@ def test_ui_approvals_lists_pending(home: Path) -> None:
     assert a["reversible"] is False
 
 
-def test_ui_approve_yes(home: Path) -> None:
-    req = _queue(home).create("calendar_create", "google_calendar", "일정 생성")
+_WF = (
+    "name: x\non:\n  schedule:\n    - cron: '10 22 * * *'\n"
+    "jobs:\n  run:\n    runs-on: ubuntu-latest\n"
+)
+
+
+def test_ui_approve_yes_executes(home: Path) -> None:
+    """승인(yes) → executor가 실제 action 실행 (F17). github_workflow cron 변경."""
+    wf = home / ".github" / "workflows" / "d.yml"
+    wf.parent.mkdir(parents=True)
+    wf.write_text(_WF, encoding="utf-8")
+    req = _queue(home).create(
+        "github_workflow_update_cron", "github", "cron 변경",
+        params={"workflow_path": ".github/workflows/d.yml", "new_cron": "0 21 * * *"},
+    )
     client = TestClient(make_app(edith_home=home, secret=SECRET))
     resp = client.post("/ui/approve", json={"id": req.id, "decision": "yes"})
     assert resp.status_code == 200
-    assert resp.json()["status"] == "approved"
-    assert _queue(home).get(req.id).status == "approved"
+    data = resp.json()
+    assert data["status"] == "executed"
+    assert data["execution"]["ok"] is True
+    assert "0 21 * * *" in wf.read_text(encoding="utf-8")  # 실제로 파일 바뀜
+    assert _queue(home).get(req.id).status == "executed"
+
+
+def test_ui_approve_yes_no_executor(home: Path) -> None:
+    """executor 없는 action_type — 승인됐으나 실행 실패가 응답에 드러남."""
+    req = _queue(home).create("calendar_create", "google_calendar", "일정 생성")
+    client = TestClient(make_app(edith_home=home, secret=SECRET))
+    data = client.post("/ui/approve", json={"id": req.id, "decision": "yes"}).json()
+    assert data["status"] == "executed"
+    assert data["execution"]["ok"] is False
+    assert "executor 없음" in data["execution"]["error"]
 
 
 def test_ui_approve_no(home: Path) -> None:

@@ -300,17 +300,25 @@ def approve_show(id_: str) -> None:
 @approve_group.command("yes")
 @click.argument("id_")
 def approve_yes(id_: str) -> None:
-    """approve. status: pending → approved. executor는 feature별 별도 실행."""
+    """approve + execute. status: pending → approved → executed (F17)."""
     from harness.approval import ApprovalQueue
+    from harness.executor import ApprovalExecutor
 
-    queue = ApprovalQueue(_edith_home() / "harness" / "approvals.json")
+    home = _edith_home()
+    queue = ApprovalQueue(home / "harness" / "approvals.json")
     try:
         r = queue.approve(id_)
     except (KeyError, ValueError) as e:
         click.echo(f"✗ {e}", err=True)
         sys.exit(1)
     click.echo(f"✓ approved {r.id} ({r.action_type})")
-    click.echo("  executor가 실제 action 실행 후 `mark_executed` 호출 필요.")
+
+    result = ApprovalExecutor(queue, home).execute(id_)
+    if result.ok:
+        click.echo(f"✓ executed — {result.detail}")
+    else:
+        click.echo(f"✗ execution failed — {result.error}", err=True)
+        sys.exit(1)
 
 
 @approve_group.command("no")

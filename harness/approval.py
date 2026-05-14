@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Literal
@@ -32,6 +32,9 @@ class ApprovalRequest:
     approved_by: str | None = None
     executed_at: str | None = None
     error: str | None = None
+    # 실행에 필요한 구조화된 인자. executor가 이걸 보고 실제 action 수행.
+    # preview는 사람용, params는 기계용. 비어있으면 executor가 실행 불가.
+    params: dict = field(default_factory=dict)
 
     @classmethod
     def new(
@@ -42,6 +45,7 @@ class ApprovalRequest:
         risk_score: int = 5,
         reversible: bool = True,
         expires_minutes: int = 30,
+        params: dict | None = None,
     ) -> ApprovalRequest:
         now = datetime.now(UTC)
         return cls(
@@ -54,6 +58,7 @@ class ApprovalRequest:
             status="pending",
             requested_at=now.isoformat(),
             expires_at=(now + timedelta(minutes=expires_minutes)).isoformat(),
+            params=params or {},
         )
 
     def is_expired(self, now: datetime | None = None) -> bool:
@@ -89,6 +94,7 @@ class ApprovalQueue:
         risk_score: int = 5,
         reversible: bool = True,
         expires_minutes: int = 30,
+        params: dict | None = None,
     ) -> ApprovalRequest:
         req = ApprovalRequest.new(
             action_type=action_type,
@@ -97,6 +103,7 @@ class ApprovalQueue:
             risk_score=risk_score,
             reversible=reversible,
             expires_minutes=expires_minutes,
+            params=params,
         )
         all_ = self._load_all()
         all_.append(req)

@@ -264,11 +264,35 @@ def make_app(
         if not req_id or decision not in ("yes", "no"):
             raise HTTPException(status_code=400, detail="id + decision(yes|no) required")
         queue = _approval_queue()
+
+        if decision == "no":
+            try:
+                r = queue.reject(req_id)
+            except (KeyError, ValueError) as e:
+                return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
+            return JSONResponse({"ok": True, "id": r.id, "status": r.status})
+
+        # decision == "yes" — 승인 후 executor가 실제 action 실행 (F17).
         try:
-            r = queue.approve(req_id) if decision == "yes" else queue.reject(req_id)
+            queue.approve(req_id)
         except (KeyError, ValueError) as e:
             return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
-        return JSONResponse({"ok": True, "id": r.id, "status": r.status})
+        from harness.executor import ApprovalExecutor
+
+        result = ApprovalExecutor(queue, home).execute(req_id)
+        final = queue.get(req_id)
+        return JSONResponse(
+            {
+                "ok": True,
+                "id": req_id,
+                "status": final.status if final else "unknown",
+                "execution": {
+                    "ok": result.ok,
+                    "detail": result.detail,
+                    "error": result.error,
+                },
+            }
+        )
 
     @app.post("/ask")
     async def ask(request: Request) -> JSONResponse:

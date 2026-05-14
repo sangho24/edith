@@ -28,11 +28,28 @@ def _query_db(args: dict[str, Any], ctx: Context) -> dict[str, Any]:
 
 
 def _request_approval(args: dict[str, Any], ctx: Context) -> dict[str, Any]:
-    """approval queue placeholder. Phase 3 F5에서 풀 구현."""
+    """외부 write action을 ApprovalQueue에 등록 (F5/F17).
+
+    preview는 사람이 보고 판단, params는 executor가 실제 실행에 쓰는 구조화 인자.
+    params 없이 등록되면 승인돼도 executor가 실행 불가.
+    """
+    from harness.approval import ApprovalQueue
+
+    queue = ApprovalQueue(ctx.edith_home / "harness" / "approvals.json")
+    req = queue.create(
+        action_type=args["action"],
+        target_system=args.get("target_system", ""),
+        preview=args["preview"],
+        risk_score=args.get("risk_score", 5),
+        reversible=args.get("reversible", True),
+        expires_minutes=args.get("expires_minutes", 30),
+        params=args.get("params", {}),
+    )
     return {
         "queued": True,
-        "queue_id": f"pending-{datetime.now(UTC).timestamp():.0f}",
-        "note": "approval queue는 Phase 3 F5에서 풀 구현. 지금은 placeholder.",
+        "queue_id": req.id,
+        "status": req.status,
+        "note": "사용자 승인 후 executor가 실행. GUI Approvals 탭 또는 `harness approve`.",
     }
 
 
@@ -64,11 +81,18 @@ REQUEST_APPROVAL = Tool(
     input_schema={
         "type": "object",
         "properties": {
-            "action": {"type": "string", "description": "action_type, e.g., calendar_create"},
+            "action": {"type": "string", "description": "action_type, e.g., gmail_send"},
             "target_system": {"type": "string", "description": "google_calendar, gmail 등"},
             "preview": {
                 "type": "string",
                 "description": "변경 내용 diff/text — 사용자가 보고 판단",
+            },
+            "params": {
+                "type": "object",
+                "description": (
+                    "executor가 실제 실행에 쓰는 구조화 인자. "
+                    "예: gmail_send → {to, subject, body}"
+                ),
             },
             "risk_score": {"type": "integer", "default": 5, "description": "1-10"},
             "reversible": {"type": "boolean", "default": True},

@@ -41,8 +41,15 @@
 
 - **발견 맥락**: F14. `GitHubPagesDigestSource`는 read. roadmap F14 설명의 "digest 기여는 request_approval 게이트"는 미구현.
 - **왜 문제인가**: Edith가 digest에 소스 추가/제외를 제안할 수 없음.
-- **해결 방향**: ds-digest repo에 PR/issue를 여는 tool — `EXTERNAL_WRITE_TOOLS`에 등록 + `request_approval` 필수.
-- **의존**: `harness/integrations/github_pr.py` 재사용 가능.
+- **해결 방향**: F17 `ApprovalExecutor` registry에 `ds_digest_pr` executor 추가 — `request_approval`로 큐잉 후 승인되면 ds-digest repo에 PR/issue. `harness/integrations/github_pr.py` 재사용.
+- **의존**: F17 (완료) — 이제 executor 한 줄 추가 + integration만.
+
+### B5. 🟡 F17 executor가 2종류만 — 나머지 action_type 미구현
+
+- **발견 맥락**: F17. `default_registry()`에 `github_workflow_update_cron`·`gmail_send`만. `calendar_create`·`notion_update`·`slack_send`·`kakao_send`는 승인돼도 "executor 없음" 에러.
+- **왜 문제인가**: 그 action들은 LLM이 request_approval로 큐잉은 되지만 실행 불가.
+- **해결 방향**: 각 integration에 write 메서드 + executor 등록. calendar_create는 EventKit(macOS)로 실 검증 가능. 우선순위는 실사용 빈도순.
+- **의존**: 일부는 E1(실 OAuth).
 
 ### B3. ✅ ~~F14/F15 소스가 morning brief에 미편입~~ (2026-05-14 해소)
 

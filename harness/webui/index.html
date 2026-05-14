@@ -246,7 +246,13 @@ async function decide(id, decision) {
       body: JSON.stringify({ id, decision }),
     });
     const d = await r.json();
-    if (!d.ok) alert("실패: " + (d.error || r.status));
+    if (!d.ok) {
+      alert("실패: " + (d.error || r.status));
+    } else if (decision === "yes" && d.execution) {
+      alert(d.execution.ok
+        ? "✓ 실행됨 — " + (d.execution.detail || "완료")
+        : "승인됐으나 실행 실패 — " + (d.execution.error || "?"));
+    }
   } catch (e) { alert("네트워크 오류: " + e); }
   loadApprovals();
 }
