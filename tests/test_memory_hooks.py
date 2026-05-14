@@ -1,4 +1,7 @@
-"""H7 memory hooks — wiki_write의 자동 frontmatter 삽입."""
+"""H7 memory hooks — wiki_write의 자동 frontmatter 삽입.
+
+A2 — wiki_read/wiki_search의 R3 scope cross-ref 차단도 같이 검증.
+"""
 
 from __future__ import annotations
 
@@ -7,7 +10,16 @@ from pathlib import Path
 import pytest
 
 from harness.state import Context, Trace
-from harness.tools.wiki import _build_frontmatter, _has_frontmatter, _infer_page_type, _wiki_write
+from harness.tools.wiki import (
+    _build_frontmatter,
+    _has_frontmatter,
+    _infer_page_type,
+    _parse_frontmatter,
+    _scope_conflict,
+    _wiki_read,
+    _wiki_search,
+    _wiki_write,
+)
 
 
 @pytest.fixture
@@ -137,3 +149,73 @@ def test_h7_support_refs_required(ctx: Context) -> None:
     result = _wiki_write(args, ctx)
     assert not result["ok"]
     assert "support_refs" in result["reason"]
+
+
+# ── A2 — wiki R3 scope cross-ref 차단 ────────────────────────────────────
+
+
+def _page(scope: str) -> str:
+    return (
+        f"---\ntype: concept\nscope: {scope}\n"
+        f"support_refs:\n  - raw/x.md\nconfidence: high\n"
+        f"last_updated: 2026-05-14\n---\n\n# 페이지\n\n내용 본문."
+    )
+
+
+def test_parse_frontmatter_reads_scope() -> None:
+    fm = _parse_frontmatter(_page("work"))
+    assert fm is not None
+    assert fm["scope"] == "work"
+
+
+def test_parse_frontmatter_none_when_absent() -> None:
+    assert _parse_frontmatter("# 제목\n\n본문") is None
+
+
+def test_scope_conflict_rules() -> None:
+    assert _scope_conflict("work", "personal") is True
+    assert _scope_conflict("personal", "personal") is False
+    assert _scope_conflict("work", "mixed") is False  # mixed는 분리 처리
+    assert _scope_conflict(None, "personal") is False  # frontmatter 없음
+    assert _scope_conflict("unknown", "personal") is False  # 비-concrete
+
+
+def test_wiki_read_blocks_cross_scope(ctx: Context) -> None:
+    """personal task가 work 페이지를 읽으면 차단."""
+    (ctx.edith_home / "wiki/concepts/회사기밀.md").write_text(_page("work"), encoding="utf-8")
+    result = _wiki_read({"path": "wiki/concepts/회사기밀.md"}, ctx)
+    assert result["exists"] is True
+    assert result["content"] is None
+    assert result["blocked"] is True
+    assert "R3" in result["reason"]
+
+
+def test_wiki_read_allows_same_scope(ctx: Context) -> None:
+    (ctx.edith_home / "wiki/concepts/개인메모.md").write_text(
+        _page("personal"), encoding="utf-8"
+    )
+    result = _wiki_read({"path": "wiki/concepts/개인메모.md"}, ctx)
+    assert result["content"] is not None
+    assert "본문" in result["content"]
+    assert "blocked" not in result
+
+
+def test_wiki_read_allows_special_page_without_frontmatter(ctx: Context) -> None:
+    """log.md 등 frontmatter 없는 특수 페이지는 scope 무관 허용."""
+    (ctx.edith_home / "wiki/log.md").write_text("2026-05-14 · 로그 한 줄", encoding="utf-8")
+    result = _wiki_read({"path": "wiki/log.md"}, ctx)
+    assert result["content"] is not None
+
+
+def test_wiki_search_excludes_cross_scope(ctx: Context) -> None:
+    """cross-scope 페이지는 검색 결과에서 빠진다 (snippet leak 방지)."""
+    (ctx.edith_home / "wiki/concepts/work_kw.md").write_text(
+        _page("work").replace("내용 본문", "고유키워드ABC work"), encoding="utf-8"
+    )
+    (ctx.edith_home / "wiki/concepts/personal_kw.md").write_text(
+        _page("personal").replace("내용 본문", "고유키워드ABC personal"), encoding="utf-8"
+    )
+    result = _wiki_search({"query": "고유키워드ABC"}, ctx)
+    paths = [h["path"] for h in result["hits"]]
+    assert any("personal_kw" in p for p in paths)
+    assert not any("work_kw" in p for p in paths)

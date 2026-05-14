@@ -16,12 +16,11 @@
 - **해소**: `harness/skills/tool_scopes()` 역인덱스 + `policies.allow()`의 R3 — concrete scope skill의 tool은 같은 scope 또는 mixed task에서만 허용. `f15_health_scope_block.yaml` golden으로 검증. (PR 28)
 - **남은 부분**: wiki/raw frontmatter scope 게이트는 별도 → **A2**.
 
-### A2. 🟡 wiki 페이지 frontmatter scope 미검증
+### A2. ✅ ~~wiki 페이지 frontmatter scope 미검증~~ (2026-05-14 해소)
 
-- **발견 맥락**: CLAUDE.md는 모든 wiki 페이지에 `scope` frontmatter를 요구하지만 `wiki_read`/`wiki_write`가 검증하지 않음.
-- **왜 문제인가**: scope=work 페이지를 personal task가 읽어도 통과. R3의 절반(tool 단)만 막아선 leak 못 막음.
-- **해결 방향**: `wiki_read` 결과의 frontmatter `scope`를 task scope와 대조, 불일치 시 redact 또는 block.
-- **의존**: A1과 같은 PR로 묶는 게 자연스러움.
+- **발견 맥락**: CLAUDE.md는 모든 wiki 페이지에 `scope` frontmatter를 요구하지만 `wiki_read`/`wiki_search`가 검증하지 않음.
+- **해소**: `wiki_read`가 page frontmatter scope를 task scope와 대조, conflict면 content 대신 `blocked` 결과 반환. `wiki_search`는 cross-scope 페이지를 hit에서 제외(snippet leak 방지). frontmatter 없는 특수 페이지(log.md 등)는 무관. `a2_wiki_scope_block.yaml` golden으로 검증. (PR 29)
+- **남은 부분**: raw 파일 scope 게이트는 별도 — raw에 frontmatter가 없어 path heuristic 필요. 빈도 낮아 보류.
 
 ### A3. ✅ ~~`Skill.policy_keys` 필드가 선언만 되고 미사용~~ (2026-05-14 해소 — 필드 삭제)
 
@@ -131,8 +130,8 @@
 ## 처리 우선순위 (제안)
 
 ```
-✅ 해소           A1 skill scope enforce  ·  A3 policy_keys 삭제  ·  D2 server↔channel
-1순위 (🔴)         A2 wiki/raw frontmatter scope  ·  C1 빌드 하네스 step 1-2
+✅ 해소           A1 skill scope  ·  A2 wiki scope  ·  A3 policy_keys 삭제  ·  D2 server↔channel
+1순위 (🔴)         C1 빌드 하네스 step 1-2
 2순위 (🟡 caller)  B3 morning brief 편입 (digest·health helper에 caller 없음)
 3순위 (🟡)         D1 calendar 중복 정리  ·  B2 ds-digest write  ·  F1 PlayMCP 부착 결정
 4순위 (🟢)         B4 golden 보강  ·  D3 CLAUDE.md (사용자)  ·  E2  ·  E3

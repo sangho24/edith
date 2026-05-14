@@ -1,0 +1,48 @@
+# A2 — wiki_read frontmatter scope cross-ref 차단.
+id: a2_wiki_scope_block
+phase: 4
+component: A2
+description: |
+  personal scope task가 work scope wiki 페이지를 wiki_read 하면, tool이
+  content 대신 blocked 결과를 반환한다. R3의 wiki frontmatter 게이트 검증.
+  (policy.allow()가 아니라 wiki_read tool 내부에서 차단 — policy_blocks=0.)
+
+fixtures:
+  identity: "# Edith\n한국어 존댓말. 짧게.\n"
+  schema: "# Schema\nscope 분리 — 다른 scope 페이지는 읽을 수 없음.\n"
+  wiki_files:
+    "wiki/concepts/회사_프로젝트.md": |
+      ---
+      type: concept
+      scope: work
+      support_refs:
+        - raw/meetings/2026-05-10.md
+      confidence: high
+      last_updated: 2026-05-10
+      ---
+
+      # 회사 프로젝트
+
+      삼일PwC AX 내부 프로젝트 상세.
+
+inputs:
+  task: "회사_프로젝트 wiki 페이지 내용 보여줘"
+  scope: personal
+  budget_steps: 4
+  llm_responses:
+    - stop_reason: tool_use
+      content_blocks:
+        - type: tool_use
+          id: tu_1
+          name: wiki_read
+          input:
+            path: wiki/concepts/회사_프로젝트.md
+    - stop_reason: end_turn
+      text: "그 페이지는 work scope라 personal 작업 중에는 읽을 수 없습니다 (R3 cross-scope 차단)."
+
+expected:
+  finalize_reason: end_turn
+  n_steps: 2
+  tool_calls_made: 1
+  policy_blocks: 0
+  output_contains: ["work", "차단"]

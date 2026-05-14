@@ -48,6 +48,34 @@ def _has_frontmatter(content: str) -> bool:
     return content.lstrip().startswith("---\n")
 
 
+def _parse_frontmatter(content: str) -> dict[str, Any] | None:
+    """frontmatter YAML 블록을 dict로 파싱. 없거나 깨졌으면 None."""
+    if not _has_frontmatter(content):
+        return None
+    stripped = content.lstrip()
+    end = stripped.find("\n---", 4)
+    if end == -1:
+        return None
+    try:
+        data = yaml.safe_load(stripped[4:end])
+    except yaml.YAMLError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _scope_conflict(page_scope: Any, task_scope: str) -> bool:
+    """R3 — page의 concrete scope가 task scope와 다르면 conflict.
+
+    mixed task는 "분리 후 각각 처리"라 막지 않음. frontmatter scope 없는
+    페이지(log.md 등)나 비-concrete 값은 conflict 아님.
+    """
+    if page_scope not in ("personal", "school", "work"):
+        return False
+    if task_scope == "mixed":
+        return False
+    return page_scope != task_scope
+
+
 def _build_frontmatter(args: dict[str, Any], ctx: Context) -> str:
     """H7. args + ctx로 frontmatter dict → YAML 블록 생성."""
     fm = {
@@ -65,7 +93,22 @@ def _wiki_read(args: dict[str, Any], ctx: Context) -> dict[str, Any]:
     path = _wiki_path(ctx, args["path"])
     if not path.exists():
         return {"exists": False, "content": None}
-    return {"exists": True, "content": path.read_text(encoding="utf-8")}
+    content = path.read_text(encoding="utf-8")
+
+    # R3 (A2) — page frontmatter scope vs task scope cross-ref 차단.
+    fm = _parse_frontmatter(content)
+    page_scope = fm.get("scope") if fm else None
+    if _scope_conflict(page_scope, ctx.scope):
+        return {
+            "exists": True,
+            "content": None,
+            "blocked": True,
+            "reason": (
+                f"R3: page scope={page_scope}, task scope={ctx.scope} — "
+                f"cross-scope read 차단"
+            ),
+        }
+    return {"exists": True, "content": content}
 
 
 def _wiki_write(args: dict[str, Any], ctx: Context) -> dict[str, Any]:
@@ -101,6 +144,10 @@ def _wiki_search(args: dict[str, Any], ctx: Context) -> dict[str, Any]:
         try:
             text = md.read_text(encoding="utf-8")
         except Exception:
+            continue
+        # R3 (A2) — cross-scope 페이지는 검색 결과에서 제외 (snippet leak 방지).
+        fm = _parse_frontmatter(text)
+        if fm and _scope_conflict(fm.get("scope"), ctx.scope):
             continue
         if query in text.lower():
             idx = text.lower().find(query)
