@@ -437,11 +437,15 @@ harness/skills/
 
 ### 4.4.2 Phase 4 feature 카탈로그
 
-| F# | 제목 | Eval (먼저 작성) | 의존 |
-|---|---|---|---|
-| F13 | **멀티채널 surface** | `Channel` 인터페이스 추출, Telegram을 첫 구현체로. email + 1개 추가. 채널별 송수신 round-trip 테스트 | H8 |
-| F14 | **ds-digest skill 확장** | read-only를 넘어 `GitHubPagesDigestSource`(latest.json fetch), morning brief 편입. digest 기여는 request_approval 게이트 | H8, F4 |
-| F15 | **헬스 데이터 skill** | Apple Health(샤오미 Mi Band → Apple Health 동기화) 소스. scope=personal 고정 + policy 게이트. 수면·활동 fact를 wiki/concepts에 컴파일 | H8, H5 |
+| F# | 제목 | Eval (먼저 작성) | 상태 | 의존 |
+|---|---|---|---|---|
+| F13 | **멀티채널 surface** | `harness/integrations/channel.py` — `Channel` Protocol + `IncomingMessage` + `ChannelRegistry`. `TelegramChannel` 어댑터(실 환경) + `MockChannel`(테스트). 채널별 송수신 round-trip 테스트 | ✅ 2026-05-14 | H8 |
+| F14 | **ds-digest skill 확장** | `GitHubPagesDigestSource`(latest.json fetch, fetch 함수 inject), `get_digest_source()` 팩토리. 네트워크·JSON 실패 graceful degrade. golden eval `f14_ds_digest.yaml` | ✅ 2026-05-14 | H8, F4 |
+| F15 | **헬스 데이터 skill** | Apple Health(샤오미 Mi Band → Apple Health 동기화) 소스. scope=personal 고정 + policy 게이트. 수면·활동 fact를 wiki/concepts에 컴파일 | 진행 중 | H8, H5 |
+
+> F13은 OpenClaw처럼 채널 14개를 다 만들지 않는다. 지금 실제 wired된 건 Telegram 하나 —
+> 인터페이스만 추출해두고, EmailChannel·KakaoChannel은 **실제 호출부가 생길 때** 어댑터를 추가한다.
+> caller 없는 채널은 유지보수 부채다.
 
 > 멀티채널은 OpenClaw처럼 14개 다 하지 않는다. **실제 쓰는 것만** — 안 쓰는 채널은 유지보수 부채.
 > 헬스는 가장 민감한 데이터다. F15는 policy 게이트 시연(미승인 cross-scope retrieve 0건)이 머지 기준.
