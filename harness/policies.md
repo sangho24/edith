@@ -20,11 +20,17 @@ raw 디렉토리 안 파일을 수정·삭제하는 tool은 거부.
 
 ## R3. Scope cross-reference 금지
 
-- task `scope=personal` 또는 `scope=school`일 때 `raw/` 안에서 work 표식 파일 retrieve 금지.
-- task `scope=work`일 때 외부 (anthropic) LLM 호출 금지 → 사내 endpoint만.
-- `scope=mixed` task는 분리 후 각각 처리, 또는 사용자 명시 동의 필요.
+- **skill scope 게이트 (enforce 됨, Phase 4 H8/A1)**: 모든 tool은 소속 skill의 scope를
+  가진다 (`harness/skills/<name>.py`). concrete scope(`personal`/`school`/`work`) skill의
+  tool은 **같은 scope task 또는 `mixed` task에서만** 호출 가능. 예: `health_summary`·
+  `digest_latest`(personal skill)를 `work` task가 호출하면 차단.
+  - `allow()`가 `harness.skills.tool_scopes()` 역인덱스로 판정.
+  - `scope=any` skill(core·calendar·mail·recall·papers·repo)의 tool은 R3 무관.
+  - `scope=mixed` task는 "분리 후 각각 처리" 원칙이라 R3가 막지 않음.
+- **wiki/raw frontmatter scope 게이트 (미구현)**: wiki 페이지·raw 파일의 frontmatter
+  `scope`를 task scope와 대조하는 검사는 아직 없음 — `docs/06_design_backlog.md` A2.
 
-> Phase 1엔 raw 파일 자체에 scope 메타가 없어서 path heuristic으로만 판단. 정식 enforce는 Phase 2에서 frontmatter scope 읽고 강제.
+> 검증: `evals/golden/f15_health_scope_block.yaml` (work task가 health_summary 호출 → 차단).
 
 ## R4. PII redaction (외부 LLM payload)
 

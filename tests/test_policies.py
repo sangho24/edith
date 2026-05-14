@@ -40,6 +40,40 @@ def test_capture_text_allowed() -> None:
     assert allowed
 
 
+def test_r3_personal_skill_blocked_in_work_task() -> None:
+    """health_summary(personal skill)는 work task에서 차단."""
+    allowed, reason = policies.allow("health_summary", {}, scope="work")
+    assert not allowed
+    assert reason is not None and "R3" in reason
+    assert "personal" in reason
+
+
+def test_r3_personal_skill_allowed_in_personal_task() -> None:
+    allowed, reason = policies.allow("health_summary", {}, scope="personal")
+    assert allowed
+    assert reason is None
+
+
+def test_r3_personal_skill_allowed_in_mixed_task() -> None:
+    """mixed task는 분리 후 각각 처리 — R3가 막지 않음."""
+    allowed, _ = policies.allow("health_summary", {}, scope="mixed")
+    assert allowed
+
+
+def test_r3_any_scope_skill_never_blocked() -> None:
+    """core skill(scope=any) tool은 어느 task scope에서도 허용."""
+    for sc in ("personal", "school", "work", "mixed"):
+        allowed, _ = policies.allow("wiki_read", {"path": "wiki/x.md"}, scope=sc)  # type: ignore[arg-type]
+        assert allowed, f"wiki_read blocked in {sc}"
+
+
+def test_r3_ds_digest_blocked_in_school_task() -> None:
+    """digest_latest(ds-digest skill, personal)는 school task에서 차단."""
+    allowed, reason = policies.allow("digest_latest", {}, scope="school")
+    assert not allowed
+    assert reason is not None and "R3" in reason
+
+
 def test_r4_redact_email() -> None:
     text = "Email me at sam9787@naver.com"
     redacted, counts = policies.redact_pii(text)

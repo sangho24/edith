@@ -10,12 +10,11 @@
 
 ## A. 정책·안전 (policy & safety)
 
-### A1. 🔴 R3 scope cross-ref enforce 미구현
+### A1. ✅ ~~R3 scope cross-ref enforce 미구현~~ (2026-05-14 해소 — skill scope 게이트)
 
-- **발견 맥락**: F15 health skill (scope=personal) 머지 시. `harness/policies.py`가 R3를 "Phase 2 frontmatter 도입 후"로 미뤄둠 (`allow()` 주석).
-- **왜 문제인가**: health·work skill이 scope를 *선언*만 하고 런타임이 강제하지 않는다. work/school task에서 `health_summary`가 호출돼도 안 막힌다. CLAUDE.md 답변 규칙 3번(scope 분리)이 코드로 강제되지 않음.
-- **해결 방향**: `policy.allow(tool, args, scope)`에 R3 추가 — tool이 속한 skill의 `scope`와 task `scope`가 충돌하면(`personal` skill을 `work` task에서) block. skill→tool 역인덱스가 필요 (`harness/skills/`에서 빌드).
-- **의존**: `harness/skills/` (있음). frontmatter 기반 wiki scope 체크는 별도(A2).
+- **발견 맥락**: F15 health skill (scope=personal) 머지 시. `harness/policies.py`가 R3를 "Phase 2 frontmatter 도입 후"로 미뤄둠.
+- **해소**: `harness/skills/tool_scopes()` 역인덱스 + `policies.allow()`의 R3 — concrete scope skill의 tool은 같은 scope 또는 mixed task에서만 허용. `f15_health_scope_block.yaml` golden으로 검증. (PR 28)
+- **남은 부분**: wiki/raw frontmatter scope 게이트는 별도 → **A2**.
 
 ### A2. 🟡 wiki 페이지 frontmatter scope 미검증
 
@@ -24,11 +23,10 @@
 - **해결 방향**: `wiki_read` 결과의 frontmatter `scope`를 task scope와 대조, 불일치 시 redact 또는 block.
 - **의존**: A1과 같은 PR로 묶는 게 자연스러움.
 
-### A3. 🟡 `Skill.policy_keys` 필드가 선언만 되고 미사용
+### A3. ✅ ~~`Skill.policy_keys` 필드가 선언만 되고 미사용~~ (2026-05-14 해소 — 필드 삭제)
 
 - **발견 맥락**: H8 skill registry. `health` skill이 `policy_keys=["scope:personal"]`을 선언하지만 읽는 코드가 없음.
-- **왜 문제인가**: 죽은 필드 = 거짓 신호. 보는 사람이 "정책이 걸려있다"고 오해.
-- **해결 방향**: A1 구현 시 `policy_keys`를 실제 enforce 입력으로 쓰거나, 안 쓸 거면 필드 삭제.
+- **해소**: A1의 R3는 `policy_keys`가 아니라 `Skill.scope`를 직접 입력으로 쓴다. 죽은 `policy_keys` 필드 삭제. (PR 28)
 
 ---
 
@@ -133,10 +131,11 @@
 ## 처리 우선순위 (제안)
 
 ```
-1순위 (🔴)         A1+A2 scope enforce  ·  C1 빌드 하네스 step 1-2
-2순위 (🟡 caller)  D2 server↔channel  ·  B3 morning brief 편입
-3순위 (🟡)         D1 calendar 중복 정리  ·  B2 ds-digest write
-4순위 (🟢)         B4 golden 보강  ·  D3 CLAUDE.md (사용자)  ·  E2
+✅ 해소           A1 skill scope enforce  ·  A3 policy_keys 삭제  ·  D2 server↔channel
+1순위 (🔴)         A2 wiki/raw frontmatter scope  ·  C1 빌드 하네스 step 1-2
+2순위 (🟡 caller)  B3 morning brief 편입 (digest·health helper에 caller 없음)
+3순위 (🟡)         D1 calendar 중복 정리  ·  B2 ds-digest write  ·  F1 PlayMCP 부착 결정
+4순위 (🟢)         B4 golden 보강  ·  D3 CLAUDE.md (사용자)  ·  E2  ·  E3
 상시               E1 실 OAuth — 사용자 수동
 ```
 

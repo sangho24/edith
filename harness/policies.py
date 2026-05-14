@@ -43,9 +43,8 @@ PII_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
 
 
 def allow(tool: str, args: dict[str, Any], scope: Scope) -> tuple[bool, str | None]:
-    """Phase 1+ policy check (R1, R2 강제).
+    """Phase 1+ policy check (R1, R2, R3 강제).
 
-    R3 scope cross-ref은 Phase 2 frontmatter 도입 후 enforce.
     R4 PII는 별도 `check_external_payload` 함수로.
 
     Returns:
@@ -58,6 +57,19 @@ def allow(tool: str, args: dict[str, Any], scope: Scope) -> tuple[bool, str | No
     # R2
     if tool in EXTERNAL_WRITE_TOOLS:
         return False, f"R2: {tool} is external write — request_approval required first"
+
+    # R3 — skill scope vs task scope cross-ref.
+    # concrete scope(personal/school/work) skill의 tool은 같은 scope task 또는
+    # mixed task에서만 허용. (mixed는 "분리 후 각각 처리" — CLAUDE.md scope 룰.)
+    from harness.skills import tool_scopes
+
+    skill_scope = tool_scopes().get(tool)
+    if skill_scope is not None and skill_scope != "any":
+        if scope != "mixed" and scope != skill_scope:
+            return False, (
+                f"R3: {tool} is {skill_scope}-scoped — blocked in {scope} task "
+                f"(cross-scope retrieve 금지)"
+            )
 
     return True, None
 

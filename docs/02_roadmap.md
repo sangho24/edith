@@ -443,9 +443,10 @@ harness/skills/
 | F14 | **ds-digest skill 확장** | `GitHubPagesDigestSource`(latest.json fetch, fetch 함수 inject), `get_digest_source()` 팩토리. 네트워크·JSON 실패 graceful degrade. golden eval `f14_ds_digest.yaml` | ✅ 2026-05-14 | H8, F4 |
 | F15 | **헬스 데이터 skill** | `apple_health.py` — `AppleHealthExportSource`(export.xml iterparse) + `MockHealthSource` + `daily_summary`. `health_summary` tool, `health` skill(scope=personal). golden eval `f15_health.yaml` | ✅ 2026-05-14 | H8, H5 |
 
-> F15의 policy 게이트는 skill `scope="personal"` 선언 + read-only 로컬 접근으로 1차 확보.
-> work/school task에서 `health_summary`를 막는 R3(scope cross-ref) **enforce는 아직 미구현** —
-> `harness/policies.py`가 R3를 "Phase 2 frontmatter 도입 후"로 미뤄둔 상태. 후속 과제.
+> F15의 policy 게이트: skill `scope="personal"` + R3 enforce (A1, 2026-05-14 완료).
+> `policies.allow()`가 `harness.skills.tool_scopes()`로 work/school task의 `health_summary`
+> 호출을 차단. `f15_health_scope_block.yaml` golden으로 시연. wiki/raw frontmatter scope
+> 게이트는 별도 미구현 — `docs/06_design_backlog.md` A2.
 
 > F13은 OpenClaw처럼 채널 14개를 다 만들지 않는다. 지금 실제 wired된 건 Telegram 하나 —
 > 인터페이스만 추출해두고, EmailChannel·KakaoChannel은 **실제 호출부가 생길 때** 어댑터를 추가한다.

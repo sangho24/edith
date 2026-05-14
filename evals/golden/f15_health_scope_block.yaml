@@ -1,0 +1,33 @@
+# Phase 4 F15 — R3 scope 게이트 시연.
+id: f15_health_scope_block
+phase: 4
+component: F15
+description: |
+  work scope task가 health_summary(personal skill) tool을 호출하면
+  정책 R3가 차단한다. F15 머지 기준의 "policy 게이트 시연 — 미승인
+  cross-scope retrieve 0건"을 검증.
+
+fixtures:
+  identity: "# Edith\n한국어 존댓말. 짧게.\n"
+  schema: "# Schema\nscope 분리 — work task는 personal 데이터 접근 불가.\n"
+
+inputs:
+  task: "회사 업무 정리하면서 내 수면 데이터도 같이 봐줘"
+  scope: work
+  budget_steps: 4
+  llm_responses:
+    - stop_reason: tool_use
+      content_blocks:
+        - type: tool_use
+          id: tu_1
+          name: health_summary
+          input: {}
+    - stop_reason: end_turn
+      text: "수면 데이터는 personal scope라 work 작업 중에는 조회할 수 없습니다. scope를 나눠서 따로 요청해주세요."
+
+expected:
+  finalize_reason: end_turn
+  n_steps: 2
+  tool_calls_made: 1
+  policy_blocks: 1
+  output_contains: ["personal", "scope"]

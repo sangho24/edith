@@ -10,11 +10,12 @@ ds-digest·헬스 같은 신규 기능은 harness/skills/<name>.py 추가만으�
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Literal
 
 from harness.tools import Registry, Tool
 
-Scope = Literal["personal", "school", "work", "any"]
+SkillScope = Literal["personal", "school", "work", "any"]
 
 
 @dataclass(frozen=True)
@@ -23,14 +24,16 @@ class Skill:
 
     CLAUDE.md의 "새 feature는 eval YAML 먼저" 룰을 manifest 레벨에서 강제하기 위해
     eval_globs를 둔다. tests/test_skills.py가 glob이 실재하는 파일을 가리키는지 검증.
+
+    scope는 정책 R3(scope cross-ref)의 입력 — concrete scope(personal/school/work)
+    skill의 tool은 다른 scope task에서 호출되면 policies.allow()가 차단한다.
     """
 
     name: str
-    scope: Scope
+    scope: SkillScope
     tools: list[Tool]
     eval_globs: list[str] = field(default_factory=list)
     channels: list[str] = field(default_factory=list)
-    policy_keys: list[str] = field(default_factory=list)
 
 
 def all_skills() -> list[Skill]:
@@ -67,3 +70,13 @@ def build_registry() -> Registry:
         for tool in skill.tools:
             reg.register(tool)
     return reg
+
+
+@lru_cache(maxsize=1)
+def tool_scopes() -> dict[str, SkillScope]:
+    """tool name → 소속 skill의 scope. 정책 R3 enforce용 역인덱스."""
+    out: dict[str, SkillScope] = {}
+    for skill in all_skills():
+        for tool in skill.tools:
+            out[tool.name] = skill.scope
+    return out

@@ -2,7 +2,7 @@
 
 scope=personal 고정. Edith가 다루는 가장 민감한 데이터 — cross-scope retrieve 금지.
 정책 게이트: skill scope가 personal이므로 work/school task에서 health_summary가
-호출되면 R3(scope cross-ref) 룰로 차단되어야 한다 (R3 enforce는 추후).
+호출되면 policies.allow()의 R3 룰로 차단된다 (f15_health_scope_block.yaml로 검증).
 """
 
 from __future__ import annotations
@@ -14,6 +14,8 @@ SKILL = Skill(
     name="health",
     scope="personal",
     tools=[health.HEALTH_SUMMARY],
-    eval_globs=["evals/golden/f15_health.yaml"],
-    policy_keys=["scope:personal"],
+    eval_globs=[
+        "evals/golden/f15_health.yaml",
+        "evals/golden/f15_health_scope_block.yaml",
+    ],
 )
