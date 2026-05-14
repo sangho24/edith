@@ -106,7 +106,7 @@ def test_policy_blocks_external_write(edith_home: Path) -> None:
 
 
 def test_registry_has_expected_tools() -> None:
-    """기본 registry에 skill manifest의 모든 tool이 등록됨 (Phase 1: 9 + Phase 3: 8 + Phase 4: 1)."""
+    """기본 registry에 skill manifest의 모든 tool 등록 (P1: 9 + P3: 8 + P4: 1)."""
     reg = build_default_registry()
     specs = reg.all_specs()
     assert len(specs) == 18
