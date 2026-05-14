@@ -152,18 +152,26 @@ skill 추상화(`harness/skills/`) 도입으로 이 접점이 더 깔끔해졌�
 
 ---
 
-## 4. 도입 순서 (제안)
+## 4. 도입 순서 (현황)
 
-이 문서는 설계까지다. 실제 도입은 별도 task로:
+| step | 내용 | 검증 | 상태 |
+|---|---|---|---|
+| 1 | `phases/` 골격 + `phases/index.json` 스키마 | `phases/b4-golden-evals/` 레퍼런스 | ✅ 2026-05-14 |
+| 2 | `scripts/execute.py` `StepExecutor` (재시도·상태·컨텍스트 누적) | `tests/test_execute.py` (10 tests, runner·commit inject) | ✅ 2026-05-14 |
+| 3 | `.claude/commands/build.md` 슬래시 커맨드 (Phase A-E 가이드) | dry-run 1회 확인 | ✅ 2026-05-14 |
+| 4 | 첫 실전 task — `b4-golden-evals` (papers/repo/jd skill에 golden 추가) | golden eval 통과 | 준비됨 — 사용자 실행 대기 |
 
-| step | 내용 | 검증 |
-|---|---|---|
-| 1 | `phases/` 골격 + `phases/index.json` 스키마 | JSON 스키마 테스트 |
-| 2 | `scripts/execute.py` `StepExecutor` (git·재시도·상태) | `scripts/test_execute.py` |
-| 3 | `.claude/commands/build.md` 슬래시 커맨드 (Phase A-E 가이드) | 수동 1회 dry-run |
-| 4 | 첫 실전 task로 **ds-digest skill 확장**을 빌드 하네스로 구현 | golden eval 통과 |
+**검증 보완** (실 `claude` subprocess를 이 환경에서 못 돌리는 문제):
+- runner·commit_fn을 inject 가능하게 설계 → 오케스트레이션 로직은 mock으로 100% 단위 테스트.
+- `--dry-run` → runner·commit 호출 없이 실행 계획만 출력. `python scripts/execute.py b4-golden-evals --dry-run`.
+- 첫 실전 task를 **저위험**으로 선정 (`b4-golden-evals`는 기존 로직 안 건드리고 golden YAML만 추가 — 헛짓해도 피해가 YAML 몇 개).
 
-step 4가 곧 빌드 하네스의 첫 골든 케이스 — 자기 자신을 자기 자신으로 검증한다.
+step 4 실행은 사용자가 `python scripts/execute.py b4-golden-evals`로 1회 실검증 — 자기 자신을 자기 자신으로 검증한다.
+
+### v1이 아직 안 하는 것
+- `feat-<task>` 브랜치 자동 생성 — v1은 현재 브랜치에 step별 커밋. 브랜치 전략은 후속.
+- step의 선행조건 파일을 prompt에 자동 첨부 — v1은 가드레일(CLAUDE.md+identity.md)만 주입,
+  선행조건은 step.md에 경로로 명시되고 runner(claude)가 직접 읽는다.
 
 ---
 
@@ -178,3 +186,4 @@ step 4가 곧 빌드 하네스의 첫 골든 케이스 — 자기 자신을 자�
 ## 변경 이력
 
 - 2026-05-14 v0.1 — jha0313/harness_framework 참조, 빌드 하네스 5-페이즈 설계 초안. skill 추상화(`harness/skills/`) 도입 직후 작성.
+- 2026-05-14 v0.2 — C1 구현 (PR 31). `scripts/execute.py` StepExecutor + `tests/test_execute.py` + `phases/b4-golden-evals/` + `.claude/commands/build.md`. §4 현황 갱신.

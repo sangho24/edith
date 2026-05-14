@@ -23,13 +23,13 @@ run:
 	uv run harness run "$(TASK)"
 
 lint:
-	uv run ruff check harness tests
+	uv run ruff check harness tests scripts
 
 fmt:
-	uv run ruff format harness tests
+	uv run ruff format harness tests scripts
 
 typecheck:
-	uv run pyright harness tests
+	uv run pyright harness tests scripts
 
 eval:
 	uv run harness eval

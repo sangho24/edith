@@ -59,12 +59,11 @@
 
 ## C. 빌드 하네스 (docs/05)
 
-### C1. 🔴 빌드 하네스가 설계만 — 구현 0
+### C1. ✅ ~~빌드 하네스가 설계만 — 구현 0~~ (2026-05-14 해소, step 4는 사용자 실행 대기)
 
 - **발견 맥락**: `docs/05_cc_harness.md` 작성. `scripts/execute.py`·`phases/`·`.claude/commands/build.md` 미구현.
-- **왜 문제인가**: roadmap §4.4.3이 "Phase 4부터 빌드 하네스로 짓는다"고 했지만 도구가 없음. Phase 4 자체는 사람이 수동으로 지음.
-- **해결 방향**: `docs/05` §4 도입 순서대로 — (1) `phases/` 스키마 (2) `StepExecutor` (3) `.claude/commands/build.md` (4) 첫 실전 task. 독립 PR 3-4개로 분해 가능.
-- **의존**: 없음. 단 step 2(StepExecutor)는 Claude Code subprocess 호출이라 테스트가 까다로움 — `forward_fn` inject 패턴처럼 executor도 runner inject 가능하게 설계할 것.
+- **해소**: `scripts/execute.py` StepExecutor (runner·commit_fn inject, --dry-run) + `tests/test_execute.py` 10 tests + `phases/b4-golden-evals/` 첫 실전 task + `.claude/commands/build.md`. (PR 31)
+- **남은 부분**: step 4(`b4-golden-evals` 실행)는 실 `claude` subprocess라 사용자가 `python scripts/execute.py b4-golden-evals`로 1회 실검증해야 함. `feat-<task>` 브랜치 자동 생성은 v1 미포함.
 
 ---
 
@@ -129,8 +128,8 @@
 ## 처리 우선순위 (제안)
 
 ```
-✅ 해소           A1 skill scope · A2 wiki scope · A3 policy_keys · B3 brief 편입 · D2 server↔channel
-1순위 (🔴)         C1 빌드 하네스 step 1-2
+✅ 해소           A1·A2 scope · A3 policy_keys · B3 brief 편입 · C1 빌드 하네스 · D2 server↔channel
+대기 (사용자)      C1 step 4 — `python scripts/execute.py b4-golden-evals` 실검증
 3순위 (🟡)         D1 calendar 중복 정리  ·  B2 ds-digest write  ·  F1 PlayMCP 부착 결정
 4순위 (🟢)         B4 golden 보강  ·  D3 CLAUDE.md (사용자)  ·  E2  ·  E3
 상시               E1 실 OAuth — 사용자 수동

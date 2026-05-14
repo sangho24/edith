@@ -1,0 +1,12 @@
+{
+  "name": "b4-golden-evals",
+  "description": "papers/repo/jd skill의 eval_globs가 비어있음 (backlog B4). 각 skill에 golden YAML 1개씩 추가하고 eval_globs에 연결. 빌드 하네스(scripts/execute.py)의 첫 실전 task — 기존 로직을 안 건드리고 YAML만 추가하므로 저위험.",
+  "status": "pending",
+  "started_at": null,
+  "completed_at": null,
+  "steps": [
+    {"slug": "papers-golden", "file": "step1.md", "status": "pending"},
+    {"slug": "repo-golden", "file": "step2.md", "status": "pending"},
+    {"slug": "jd-golden", "file": "step3.md", "status": "pending"}
+  ]
+}

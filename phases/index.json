@@ -1,0 +1,10 @@
+{
+  "tasks": [
+    {
+      "name": "b4-golden-evals",
+      "description": "papers/repo/jd skill에 golden eval 추가 (backlog B4) — 빌드 하네스 첫 실전 task (저위험)",
+      "status": "pending",
+      "created_at": "2026-05-14"
+    }
+  ]
+}
