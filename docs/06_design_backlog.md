@@ -107,6 +107,27 @@
 - **발견 맥락**: docs/04 §7. 현재 8765는 HTTP. Telegram은 HTTPS public URL 강제.
 - **해결 방향**: Tailscale Funnel 또는 Cloudflare Tunnel (PR #17에서 일부 진행됨 — 현황 확인 필요).
 
+### E3. 🟢 CI 게이트 명령이 `ruff | tail`로 exit code를 가림
+
+- **발견 맥락**: PR 25. `uv run ruff check ... | tail -2 && ...` — 파이프가 ruff의 exit 1을 가려서 lint 에러(PR 23 유입)가 커밋됨. PR 26에서 사후 수정.
+- **해결 방향**: CI 게이트는 `make check` 단일 명령으로. 출력 자르려면 `tail`이 아니라 ruff 자체 옵션 또는 `set -o pipefail`.
+
+---
+
+## F. 외부 스킬 부착 (docs/07)
+
+### F1. 🟡 PlayMCP 부착 아키텍처 미결정
+
+- **발견 맥락**: `docs/07_external_skills_catalog.md` §4. PlayMCP(카카오 MCP)를 Edith에 붙이는 방식이 두 갈래.
+- **선택지**: (a) Edith runtime이 MCP client가 되어 `mcp__PlayMCP__*` 직접 호출 — 얇지만 trace·policy 누락 위험. (b) MCP 툴을 `harness/tools/`로 1:1 래핑 — trace·policy 일관, 래퍼 코드 증가.
+- **해결 방향**: Phase B 토론. R1(KakaoMemoChannel) 부착 PR 전에 결정 필요.
+- **의존**: docs/07 R1-R4 부착 PR 전부 이 결정에 막힘.
+
+### F2. 🟢 docs/07 R1-R4 외부 스킬 미부착
+
+- **발견 맥락**: docs/07 ROI 분석. R1 KakaoMemoChannel · R2 youtube skill · R3 naver skill · R4 hwp.
+- **해결 방향**: docs/07 §4 부착 순서대로 독립 PR. 각각 golden eval 동봉. F1 결정 후 착수.
+
 ---
 
 ## 처리 우선순위 (제안)
