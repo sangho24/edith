@@ -157,6 +157,12 @@ def make_app(
             )
             telegram_client = TelegramClient(token=token, allowed_chat_ids=allowed)
 
+    # F13 — TelegramClient를 channel-agnostic Channel 인터페이스로 감싼다.
+    # webhook 핸들러는 Channel만 보므로, 새 채널 추가 시 server.py는 안 바뀜.
+    from harness.integrations.channel import TelegramChannel
+
+    channel = TelegramChannel(telegram_client) if telegram_client is not None else None
+
     app = FastAPI(title="Edith Home Hub Server")
 
     @app.get("/health")
@@ -240,25 +246,25 @@ def make_app(
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"invalid json: {e}") from e
 
-        if telegram_client is None:
+        if channel is None:
             return JSONResponse(
                 {"ok": True, "note": "telegram_client 미설정 — payload received but skipped"}
             )
 
-        update = telegram_client.parse_update(payload)
-        if update is None:
+        msg = channel.parse_incoming(payload)
+        if msg is None:
             return JSONResponse({"ok": True, "skipped": True})
 
         # 명령 / 일반 메시지 분기
-        if update.text.startswith("/start"):
-            telegram_client.send_message(
-                update.chat_id,
+        if msg.text.startswith("/start"):
+            channel.send(
+                msg.sender_id,
                 "안녕하세요 — Edith 봇입니다. /help 로 사용법 확인.",
             )
             return JSONResponse({"ok": True, "command": "start"})
 
-        if update.text.startswith("/help"):
-            telegram_client.send_message(update.chat_id, HELP_TEXT)
+        if msg.text.startswith("/help"):
+            channel.send(msg.sender_id, HELP_TEXT)
             return JSONResponse({"ok": True, "command": "help"})
 
         # 일반 질문 — runtime 호출
@@ -270,14 +276,14 @@ def make_app(
             run_fn = runner
 
         try:
-            trace = run_fn(update.text, edith_home=home)
+            trace = run_fn(msg.text, edith_home=home)
             answer = _compose_answer(trace)
-            telegram_client.send_message(update.chat_id, answer)
+            channel.send(msg.sender_id, answer)
             return JSONResponse(
                 {"ok": True, "trace_id": trace.id, "answered": True}
             )
         except Exception as e:
-            telegram_client.send_message(update.chat_id, f"오류: {e}")
+            channel.send(msg.sender_id, f"오류: {e}")
             return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
     return app
