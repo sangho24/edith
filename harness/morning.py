@@ -1,9 +1,10 @@
-"""Phase 3 F4 — Morning Briefing.
+"""Phase 3 F4 / Phase 4 B3 — Morning Briefing.
 
 매일 08시 (or 사용자 설정) 한 화면 brief:
 - 오늘 일정 (F2)
 - 메일 priority (F3)
-- ds-digest 최근 (F4)
+- ds-digest 최근 (F4 — GitHub Pages도 지원)
+- 헬스 요약 (F15 — Apple Health)
 - Top 3 (rule-based 합성)
 
 Push 채널: 카톡 메모 (KakaoTalk Talk Memo API) 또는 이메일. 지금은 stdout/CLI.
@@ -15,11 +16,12 @@ from __future__ import annotations
 import os
 from collections import Counter
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from harness.calendar import select_source, today_view
-from harness.integrations.ds_digest import LocalDigestSource
+from harness.integrations.apple_health import daily_summary, format_for_brief, get_health_source
+from harness.integrations.ds_digest import LocalDigestSource, get_digest_source
 from harness.mail import LocalMessageSource, triage
 
 
@@ -33,6 +35,7 @@ class MorningBrief:
         default_factory=lambda: {"n_unread": 0, "by_priority": {}, "urgent": [], "important": []}
     )
     digest: dict = field(default_factory=lambda: {"date": None, "items": [], "n": 0})
+    health: dict = field(default_factory=dict)
     top3: list[str] = field(default_factory=list)
 
     def render_text(self) -> str:
@@ -84,6 +87,13 @@ class MorningBrief:
                 lines.append(f"   · {item['title'][:80]}")
         else:
             lines.append("📰 ds-digest: (오늘 결과 없음)")
+        lines.append("")
+
+        # 헬스 (F15)
+        if self.health:
+            lines.append(f"🩺 {format_for_brief(self.health)}")
+        else:
+            lines.append("🩺 헬스 데이터: 없음")
 
         return "\n".join(lines)
 
@@ -136,13 +146,20 @@ def compose_brief(edith_home: Path) -> MorningBrief:
         "important": [i.message.subject for i in items if i.priority == "important"],
     }
 
-    # 3. ds-digest
-    digest_path = Path(
-        os.environ.get("EDITH_DS_DIGEST_LATEST") or (edith_home / "raw" / "digest" / "latest.json")
-    )
-    brief.digest = LocalDigestSource(digest_path).latest()
+    # 3. ds-digest — 명시적 로컬 경로(EDITH_DS_DIGEST_LATEST) 우선,
+    #    아니면 get_digest_source (EDITH_DS_DIGEST_URL 있으면 GitHub Pages).
+    fixture_env = os.environ.get("EDITH_DS_DIGEST_LATEST")
+    if fixture_env:
+        brief.digest = LocalDigestSource(Path(fixture_env)).latest()
+    else:
+        brief.digest = get_digest_source(edith_home).latest()
 
-    # 4. Top 3
+    # 4. 헬스 (F15) — 오늘치 Apple Health 요약
+    today_d = date.today()
+    samples = get_health_source(edith_home).samples(today_d, today_d)
+    brief.health = daily_summary(samples, today_d)
+
+    # 5. Top 3
     brief.top3 = _build_top3(brief.today, brief.mail_summary, brief.digest)
 
     return brief

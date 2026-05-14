@@ -44,11 +44,10 @@
 - **해결 방향**: ds-digest repo에 PR/issue를 여는 tool — `EXTERNAL_WRITE_TOOLS`에 등록 + `request_approval` 필수.
 - **의존**: `harness/integrations/github_pr.py` 재사용 가능.
 
-### B3. 🟡 F14/F15 소스가 morning brief에 미편입
+### B3. ✅ ~~F14/F15 소스가 morning brief에 미편입~~ (2026-05-14 해소)
 
-- **발견 맥락**: `apple_health.format_for_brief()`, ds-digest `digest_latest`가 있지만 `harness/morning.py`가 호출하지 않음.
-- **왜 문제인가**: 만든 helper에 caller가 없음. morning brief가 일정·메일만 보고 digest·헬스를 빼먹음.
-- **해결 방향**: `harness/morning.py`에 digest 최신 1줄 + 헬스 요약 1줄 추가. golden `f4_morning_brief.yaml` 갱신.
+- **발견 맥락**: `apple_health.format_for_brief()`가 caller 없는 dead helper. (digest는 이미 brief에 있었음 — 백로그 초안의 digest 언급은 부정확했음.)
+- **해소**: `compose_brief`에 헬스 섹션 추가 — `get_health_source` → 오늘치 `daily_summary`. `render_text`에 🩺 줄. digest는 `get_digest_source`로 교체(EDITH_DS_DIGEST_URL → GitHub Pages 지원). (PR 30)
 
 ### B4. 🟢 papers·repo·jd skill의 `eval_globs`가 비어있음
 
@@ -130,9 +129,8 @@
 ## 처리 우선순위 (제안)
 
 ```
-✅ 해소           A1 skill scope  ·  A2 wiki scope  ·  A3 policy_keys 삭제  ·  D2 server↔channel
+✅ 해소           A1 skill scope · A2 wiki scope · A3 policy_keys · B3 brief 편입 · D2 server↔channel
 1순위 (🔴)         C1 빌드 하네스 step 1-2
-2순위 (🟡 caller)  B3 morning brief 편입 (digest·health helper에 caller 없음)
 3순위 (🟡)         D1 calendar 중복 정리  ·  B2 ds-digest write  ·  F1 PlayMCP 부착 결정
 4순위 (🟢)         B4 golden 보강  ·  D3 CLAUDE.md (사용자)  ·  E2  ·  E3
 상시               E1 실 OAuth — 사용자 수동

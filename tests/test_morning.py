@@ -26,6 +26,7 @@ def edith_home(tmp_path: Path) -> Path:
     (tmp_path / "raw" / "calendar").mkdir(parents=True)
     (tmp_path / "raw" / "mail").mkdir(parents=True)
     (tmp_path / "raw" / "digest").mkdir(parents=True)
+    (tmp_path / "raw" / "health").mkdir(parents=True)
     (tmp_path / "wiki").mkdir()
     (tmp_path / "harness" / "traces").mkdir(parents=True)
     (tmp_path / "identity.md").write_text("# Edith\n", encoding="utf-8")
@@ -93,6 +94,23 @@ def _setup_digest(home: Path, n: int = 2) -> None:
     )
 
 
+def _setup_health(home: Path) -> None:
+    """오늘 날짜로 export.xml 작성 — compose_brief가 date.today()로 조회."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    records = [
+        f'<Record type="HKQuantityTypeIdentifierStepCount" sourceName="Mi Fitness" '
+        f'unit="count" startDate="{today} 08:00:00 +0900" '
+        f'endDate="{today} 08:10:00 +0900" value="8231"/>',
+        f'<Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Mi Fitness" '
+        f'unit="" startDate="{today} 00:00:00 +0900" '
+        f'endDate="{today} 06:52:00 +0900" value="HKCategoryValueSleepAnalysisAsleepUnspecified"/>',
+    ]
+    (home / "raw" / "health" / "export.xml").write_text(
+        '<?xml version="1.0"?>\n<HealthData>\n' + "\n".join(records) + "\n</HealthData>\n",
+        encoding="utf-8",
+    )
+
+
 # ── compose_brief ──
 
 
@@ -102,7 +120,16 @@ def test_compose_empty(edith_home: Path) -> None:
     assert brief.today["n_events"] == 0
     assert brief.mail_summary["n_unread"] == 0
     assert brief.digest["n"] == 0
+    assert brief.health == {}
     assert brief.top3 == []
+
+
+def test_compose_health(edith_home: Path) -> None:
+    """B3 — Apple Health export.xml이 있으면 brief.health에 오늘치 요약."""
+    _setup_health(edith_home)
+    brief = compose_brief(edith_home)
+    assert brief.health["steps"] == 8231.0
+    assert brief.health["sleep"] == 412.0  # 6h52m
 
 
 def test_compose_full(edith_home: Path) -> None:
@@ -180,6 +207,7 @@ def test_render_includes_all_sections(edith_home: Path) -> None:
     _setup_calendar(edith_home, n=1)
     _setup_mail(edith_home, n_urgent=1)
     _setup_digest(edith_home, n=1)
+    _setup_health(edith_home)
     brief = compose_brief(edith_home)
     text = brief.render_text()
     assert "Edith" in text
@@ -187,6 +215,8 @@ def test_render_includes_all_sections(edith_home: Path) -> None:
     assert "📅" in text
     assert "📧" in text
     assert "📰" in text
+    assert "🩺" in text
+    assert "걸음 8231" in text
 
 
 def test_render_empty_brief(edith_home: Path) -> None:
@@ -195,3 +225,4 @@ def test_render_empty_brief(edith_home: Path) -> None:
     assert "일정: 없음" in text
     assert "unread 메일: 없음" in text
     assert "ds-digest" in text
+    assert "헬스 데이터: 없음" in text
