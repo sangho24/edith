@@ -1,6 +1,7 @@
 """Tool registry + base class.
 
-9개 typed tool을 등록하는 build_default_registry() 진입점 제공.
+Tool·Registry 정의. tool을 skill 단위로 묶어 등록하는 진입점은
+harness/skills/ 로 이동했고, build_default_registry()는 그쪽으로 위임한다.
 """
 
 from __future__ import annotations
@@ -51,42 +52,11 @@ class Registry:
 
 
 def build_default_registry() -> Registry:
-    """17개 typed tool 등록 (Phase 1: 9 + Phase 3: 8)."""
-    from harness.tools import (
-        calendar,
-        digest,
-        github,
-        jd,
-        mail,
-        paper,
-        pr,
-        raw,
-        recall,
-        util,
-        wiki,
-    )
+    """17개 typed tool 등록 — harness.skills.build_registry()로 위임.
 
-    reg = Registry()
-    # Phase 1
-    reg.register(wiki.WIKI_READ)
-    reg.register(wiki.WIKI_WRITE)
-    reg.register(wiki.WIKI_SEARCH)
-    reg.register(raw.RAW_READ)
-    reg.register(raw.RAW_LIST)
-    reg.register(raw.CAPTURE_TEXT)
-    reg.register(util.QUERY_DB)
-    reg.register(util.REQUEST_APPROVAL)
-    reg.register(util.EMIT_LOG)
-    # Phase 3 F2/F3
-    reg.register(calendar.CALENDAR_TODAY)
-    reg.register(mail.MAIL_TRIAGE)
-    # Phase 3 F4
-    reg.register(digest.DIGEST_LATEST)
-    reg.register(github.GITHUB_WORKFLOW_GET_CRON)
-    # Phase 3 F6/F8
-    reg.register(recall.MEMORY_RECALL)
-    reg.register(paper.PAPER_TRIAGE)
-    # Phase 3 F7/F9
-    reg.register(pr.PR_REVIEW)
-    reg.register(jd.JD_ANALYZE)
-    return reg
+    tool은 이제 harness/skills/<name>.py의 Skill manifest로 묶여 등록된다.
+    이 함수는 runtime/cli 호출부 하위호환을 위해 유지.
+    """
+    from harness.skills import build_registry
+
+    return build_registry()

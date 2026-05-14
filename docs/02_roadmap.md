@@ -13,6 +13,7 @@ Week 0      Phase 0  Schema & Identity        (글만 씀, 코드 0줄)
 Week 1-3    Phase 1  Harness Foundation       (측정·재현·롤백 환경)
 Week 3-5    Phase 2  LLM Wiki Compilation     (Karpathy 3-layer)
 Week 5-12   Phase 3  Features on Top          (F1~F12, 매주 1개)
+Week 12+    Phase 4  Skill Platform           (H8 skill registry, F13~F15, 빌드 하네스)
 ```
 
 **왜 이 순서인가**:
@@ -401,6 +402,59 @@ PR-eval (먼저)        PR-impl (나중)
 
 ---
 
+## 4.4 Phase 4 — 스킬 플랫폼 (로드맵 이후, Week 12+)
+
+> F1-F12로 "비서가 동작한다"까지 왔다. Phase 4는 "비서를 **확장 가능하게** 만든다".
+> 계기: [OpenClaw](https://github.com/openclaw/openclaw)와 비교했을 때 Edith의 약점이
+> **확장성·생태계**(하드코딩된 tool registry, 단일 채널)였다. 깊이는 OpenClaw보다 낫지만 넓이가 없다.
+
+### 4.4.1 H8 — Skill Registry (완료, 2026-05-14)
+
+`harness/tools/`의 17개 tool을 하드코딩으로 등록하던 `build_default_registry()`를,
+`harness/skills/`의 **선언적 skill manifest**로 전환.
+
+```
+harness/skills/
+├── __init__.py       Skill dataclass + all_skills() + build_registry()
+├── core.py           wiki·raw·util  (scope=any, 항상 on)
+├── calendar.py       F2
+├── mail.py           F3
+├── ds_digest.py      F4  (scope=personal)
+├── recall.py         F6
+├── papers.py         F8
+├── repo.py           F7
+└── jd.py             F9  (scope=personal)
+```
+
+`Skill` = `name · scope · tools · eval_globs · channels · policy_keys`.
+- `eval_globs` — CLAUDE.md "새 feature는 eval YAML 먼저" 룰을 manifest 레벨에서 강제.
+  `tests/test_skills.py`가 glob이 실재 파일을 가리키는지 검증.
+- `channels` — 멀티채널 단계(F13)에서 쓸 필드. 지금은 선언만.
+- tool 파일은 이동하지 않음 — `harness/skills/`가 기존 tool 객체를 *그룹핑*. import 경로 28곳 안 깨짐.
+- `build_default_registry()`는 `build_registry()`로 위임 — runtime/cli 하위호환 유지.
+
+머지 기준: 328 tests pass · 10/10 golden eval pass (마이그레이션 전후 동일).
+
+### 4.4.2 Phase 4 feature 카탈로그
+
+| F# | 제목 | Eval (먼저 작성) | 의존 |
+|---|---|---|---|
+| F13 | **멀티채널 surface** | `Channel` 인터페이스 추출, Telegram을 첫 구현체로. email + 1개 추가. 채널별 송수신 round-trip 테스트 | H8 |
+| F14 | **ds-digest skill 확장** | read-only를 넘어 `GitHubPagesDigestSource`(latest.json fetch), morning brief 편입. digest 기여는 request_approval 게이트 | H8, F4 |
+| F15 | **헬스 데이터 skill** | Apple Health(샤오미 Mi Band → Apple Health 동기화) 소스. scope=personal 고정 + policy 게이트. 수면·활동 fact를 wiki/concepts에 컴파일 | H8, H5 |
+
+> 멀티채널은 OpenClaw처럼 14개 다 하지 않는다. **실제 쓰는 것만** — 안 쓰는 채널은 유지보수 부채.
+> 헬스는 가장 민감한 데이터다. F15는 policy 게이트 시연(미승인 cross-scope retrieve 0건)이 머지 기준.
+
+### 4.4.3 빌드 하네스 (별도 트랙)
+
+Phase 4부터 feature를 **빌드 하네스**로 짓는다 — `docs/05_cc_harness.md` 참조.
+[jha0313/harness_framework](https://github.com/jha0313/harness_framework) 패턴을 Edith 규칙에 맞춰 옮긴 것.
+런타임 하네스(`harness/`)가 "Edith가 어떻게 답하는가"를 규율한다면, 빌드 하네스는
+"Edith를 어떻게 짓는가"를 step·가드레일·eval 게이트로 규율한다. 둘은 같은 eval을 공유.
+
+---
+
 ## 5. 12주 한 흐름
 
 ```
@@ -502,7 +556,8 @@ Wiki 통계:
 - [Karpathy LLM Wiki idea file (2026-04-03)](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
 - [Beyond RAG: Karpathy's LLM Wiki Pattern (Level Up Coding)](https://levelup.gitconnected.com/beyond-rag-how-andrej-karpathys-llm-wiki-pattern-builds-knowledge-that-actually-compounds-31a08528665e)
 - [The Andrej Karpathy LLM Wiki Idea (Reliability Whisperer)](https://reliabilitywhisperer.substack.com/p/the-andrej-karpathy-llm-wiki-idea)
-- [jha0313/harness_framework](https://github.com/jha0313/harness_framework)
+- [jha0313/harness_framework](https://github.com/jha0313/harness_framework) — 빌드 하네스 패턴, `docs/05_cc_harness.md` 참조
+- [openclaw/openclaw](https://github.com/openclaw/openclaw) — 멀티채널 비서 프레임워크, Phase 4 skill 플랫폼의 비교 대상
 - [HKUDS/OpenHarness — "Open Agent Harness"](https://github.com/HKUDS/OpenHarness)
 - [awesome-harness-engineering](https://github.com/ai-boost/awesome-harness-engineering)
 - [LangChain DeepAgents — agent harness 참조 구현](https://github.com/langchain-ai/deepagents)

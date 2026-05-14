@@ -2,6 +2,8 @@
 
 > **⚠️ 실행 로드맵은 v3로 분리됨** → [`roadmap_v3_harness_first.md`](./roadmap_v3_harness_first.md) (Karpathy LLM Wiki + harness 패턴 기반). 이 문서의 Section 10·11(12주 phase·Track A)은 v3 로드맵으로 대체. 비전·문제정의·zone 격리·surfaces·deployment 등 전략 섹션은 그대로 유효.
 >
+> **⚠️ Phase 4 추가됨 (2026-05-14)** → F1-F12 이후 **스킬 플랫폼**으로 확장. 하드코딩 tool registry를 `harness/skills/`의 선언적 skill manifest로 전환(H8), 멀티채널 surface·ds-digest skill·헬스 데이터 skill(F13-F15). 계기는 [OpenClaw](https://github.com/openclaw/openclaw) 비교 — Edith는 깊이는 낫지만 확장성·생태계가 약점. 상세는 `docs/02_roadmap.md` §4.4, 빌드 하네스는 `docs/05_cc_harness.md`.
+>
 > **사용자**: 상호 (AI Scientist @ 삼일PwC AX Node, 학생 병행)
 > **작성일**: 2026-04-28 (v2 — 전략) / 2026-04-28 (v3 — 실행)
 > **북극성**: 매일 떠오르는 생각, 매주 나누는 대화, 매달 읽는 논문, 매분기 진행하는 프로젝트가 **하나의 외부 기억**에 모이고, 미래의 내가 검색·연결·재발견할 수 있는 자산이 되는 **Knowledge Twin**을 12주에 구축한다.
@@ -131,7 +133,7 @@
 | 이메일·캘린더·메신저 | unread triage, 일정 확인, 링크 저장, 답변 초안 | 중요도 분류, daily digest, reply draft |
 | 논문·리서치 | 논문 저장, 읽을거리 backlog, 메모, 비교 | 논문 triage, 핵심 주장 추출, 비교표 |
 | 회고·감정·생산성 | 일일 회고, 스트레스 요인, 집중 패턴 | daily reflection, 패턴 요약, 개선 제안 |
-| 생활 루틴 | 수면, 이동, 식사, 운동, 장보기, 행정 | reminder, 루틴 리캡, 저위험 자동화 |
+| 생활 루틴 | 수면, 이동, 식사, 운동, 장보기, 행정 | reminder, 루틴 리캡, 저위험 자동화, **헬스 데이터 연동** (Apple Health ← 샤오미 Mi Band, scope=personal, Phase 4 F15) |
 
 ### 3.2 1주일 파일럿 — passive capture + active confirmation
 
