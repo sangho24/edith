@@ -1,16 +1,19 @@
-"""PR #15 — MacBook 위에 떠있는 mini FastAPI server.
+"""PR #15 / F16 — MacBook 위에 떠있는 mini FastAPI server.
 
-역할: VPS relay 또는 iPhone (Tailscale 직접) 의 진입점.
+역할: VPS relay · iPhone (Tailscale 직접) · 브라우저 GUI 의 진입점.
 
 엔드포인트:
 - GET  /health             → 살아있는지 확인
+- GET  /                    → Web GUI (채팅 UI 단일 페이지, F16)
+- GET  /ui/brief            → 오늘 morning brief 텍스트
+- GET  /ui/traces           → 최근 trace 요약
 - POST /ask                 → {"q": "..."} → harness.runtime.run() 결과 반환
-- POST /webhook/telegram    → Telegram update payload 받아 처리 (relay 통해 forward 된 거)
+- POST /webhook/telegram    → Telegram update payload 처리 (/start /help /brief + 일반 질문)
 
 운영:
 - launchd 로 부팅 시 자동 시작 (scripts/launchd/com.edith.server.plist 추후)
 - Tailscale 내부망에서만 노출 권장 (host 127.0.0.1 + Tailscale IP)
-- HMAC 검증으로 외부 webhook 정당성 확인
+- HMAC 검증으로 외부 webhook 정당성 확인. GUI·/ui/* 는 내부망 전용 (서명 불필요)
 """
 
 from __future__ import annotations
@@ -39,6 +42,7 @@ HELP_TEXT = """🤖 Edith — 개인 비서
 📋 명령어
 /start — 인사
 /help  — 이 도움말
+/brief — 오늘 아침 브리프 (일정·메일·digest·헬스)
 
 📚 할 수 있는 일 (예시)
 
@@ -115,9 +119,18 @@ def _compose_answer(trace: Any) -> str:
 
 try:
     from fastapi import FastAPI, Header, HTTPException, Request
-    from fastapi.responses import JSONResponse
+    from fastapi.responses import HTMLResponse, JSONResponse
 except ImportError as e:  # pragma: no cover
     raise RuntimeError("fastapi 필요. uv pip install fastapi uvicorn") from e
+
+_WEBUI_INDEX = Path(__file__).resolve().parent / "webui" / "index.html"
+
+
+def _brief_text(home: Path) -> str:
+    """morning brief 텍스트 — Web GUI와 Telegram /brief 명령이 공유."""
+    from harness.morning import compose_brief
+
+    return compose_brief(home).render_text()
 
 
 def _verify_signature(body: bytes, signature: str | None, secret: str) -> bool:
@@ -172,6 +185,44 @@ def make_app(
             "edith_home": str(home),
             "secret_configured": bool(secret),
             "telegram_configured": telegram_client is not None,
+        }
+
+    # ── F16 Web GUI — Tailscale 내부망에서 브라우저로 Edith 조작 ──────
+    @app.get("/", response_class=HTMLResponse)
+    def webui() -> HTMLResponse:
+        """채팅 UI 단일 페이지. /ask·/ui/* 엔드포인트를 호출."""
+        if not _WEBUI_INDEX.exists():  # pragma: no cover
+            return HTMLResponse("<h1>Edith</h1><p>webui/index.html 없음</p>", status_code=500)
+        return HTMLResponse(_WEBUI_INDEX.read_text(encoding="utf-8"))
+
+    @app.get("/ui/brief")
+    def ui_brief() -> dict[str, Any]:
+        """오늘 morning brief 텍스트 (GUI Brief 탭)."""
+        try:
+            return {"ok": True, "text": _brief_text(home)}
+        except Exception as e:  # pragma: no cover
+            return {"ok": False, "error": str(e)}
+
+    @app.get("/ui/traces")
+    def ui_traces(last: int = 20) -> dict[str, Any]:
+        """최근 trace 요약 (GUI Traces 탭)."""
+        from harness.traces import list_traces
+
+        summaries = list_traces(home / "harness" / "traces", last=last)
+        return {
+            "ok": True,
+            "traces": [
+                {
+                    "id": s.id,
+                    "task": s.task,
+                    "scope": s.scope,
+                    "n_steps": s.n_steps_action,
+                    "n_blocked": s.n_blocked,
+                    "cost_tokens": s.cost_tokens,
+                    "finalize_reason": s.finalize_reason,
+                }
+                for s in reversed(summaries)
+            ],
         }
 
     @app.post("/ask")
@@ -266,6 +317,13 @@ def make_app(
         if msg.text.startswith("/help"):
             channel.send(msg.sender_id, HELP_TEXT)
             return JSONResponse({"ok": True, "command": "help"})
+
+        if msg.text.startswith("/brief"):
+            try:
+                channel.send(msg.sender_id, _brief_text(home))
+            except Exception as e:
+                channel.send(msg.sender_id, f"brief 생성 오류: {e}")
+            return JSONResponse({"ok": True, "command": "brief"})
 
         # 일반 질문 — runtime 호출
         if runner is None:
