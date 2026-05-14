@@ -1,0 +1,34 @@
+# Phase 4 F15 — health_summary tool via runtime.
+id: f15_health
+phase: 4
+component: F15
+description: |
+  LLM이 "최근 건강 데이터 어때?" task를 받아 health_summary tool 호출.
+  export.xml 없는 환경에서도 tool이 깨지지 않고 빈 요약을 반환하는지 확인.
+  (XML 파싱 자체는 tests/test_apple_health.py가 커버 — golden은 runtime 경로 검증.)
+  scope=personal — health skill은 가장 민감한 데이터.
+
+fixtures:
+  identity: "# Edith\n한국어 존댓말. 짧게.\n"
+  schema: "# Schema\n건강 질문은 health_summary tool로 최근 데이터 read.\n"
+
+inputs:
+  task: "최근 건강 데이터 어때?"
+  scope: personal
+  budget_steps: 4
+  llm_responses:
+    - stop_reason: tool_use
+      content_blocks:
+        - type: tool_use
+          id: tu_1
+          name: health_summary
+          input: {}
+    - stop_reason: end_turn
+      text: "최근 7일간 등록된 헬스 데이터가 없습니다. Apple Health 내보내기를 raw/health/export.xml에 두면 읽습니다."
+
+expected:
+  finalize_reason: end_turn
+  n_steps: 2
+  tool_calls_made: 1
+  policy_blocks: 0
+  output_contains: ["헬스 데이터", "export.xml"]

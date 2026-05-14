@@ -441,7 +441,11 @@ harness/skills/
 |---|---|---|---|---|
 | F13 | **멀티채널 surface** | `harness/integrations/channel.py` — `Channel` Protocol + `IncomingMessage` + `ChannelRegistry`. `TelegramChannel` 어댑터(실 환경) + `MockChannel`(테스트). 채널별 송수신 round-trip 테스트 | ✅ 2026-05-14 | H8 |
 | F14 | **ds-digest skill 확장** | `GitHubPagesDigestSource`(latest.json fetch, fetch 함수 inject), `get_digest_source()` 팩토리. 네트워크·JSON 실패 graceful degrade. golden eval `f14_ds_digest.yaml` | ✅ 2026-05-14 | H8, F4 |
-| F15 | **헬스 데이터 skill** | Apple Health(샤오미 Mi Band → Apple Health 동기화) 소스. scope=personal 고정 + policy 게이트. 수면·활동 fact를 wiki/concepts에 컴파일 | 진행 중 | H8, H5 |
+| F15 | **헬스 데이터 skill** | `apple_health.py` — `AppleHealthExportSource`(export.xml iterparse) + `MockHealthSource` + `daily_summary`. `health_summary` tool, `health` skill(scope=personal). golden eval `f15_health.yaml` | ✅ 2026-05-14 | H8, H5 |
+
+> F15의 policy 게이트는 skill `scope="personal"` 선언 + read-only 로컬 접근으로 1차 확보.
+> work/school task에서 `health_summary`를 막는 R3(scope cross-ref) **enforce는 아직 미구현** —
+> `harness/policies.py`가 R3를 "Phase 2 frontmatter 도입 후"로 미뤄둔 상태. 후속 과제.
 
 > F13은 OpenClaw처럼 채널 14개를 다 만들지 않는다. 지금 실제 wired된 건 Telegram 하나 —
 > 인터페이스만 추출해두고, EmailChannel·KakaoChannel은 **실제 호출부가 생길 때** 어댑터를 추가한다.

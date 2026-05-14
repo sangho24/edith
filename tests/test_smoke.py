@@ -105,14 +105,14 @@ def test_policy_blocks_external_write(edith_home: Path) -> None:
     assert "calendar_create" not in names
 
 
-def test_registry_has_17_tools() -> None:
-    """기본 registry에 17개 tool 등록됨 (Phase 1: 9 + Phase 3: 8)."""
+def test_registry_has_expected_tools() -> None:
+    """기본 registry에 skill manifest의 모든 tool이 등록됨 (Phase 1: 9 + Phase 3: 8 + Phase 4: 1)."""
     reg = build_default_registry()
     specs = reg.all_specs()
-    assert len(specs) == 17
+    assert len(specs) == 18
     names = {t["name"] for t in specs}
     expected = {
-        # Phase 1
+        # Phase 1 — core skill
         "wiki_read",
         "wiki_write",
         "wiki_search",
@@ -134,6 +134,8 @@ def test_registry_has_17_tools() -> None:
         # Phase 3 F7/F9
         "pr_review",
         "jd_analyze",
+        # Phase 4 F15 — health skill
+        "health_summary",
     }
     assert names == expected
 

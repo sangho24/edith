@@ -30,9 +30,10 @@ def test_no_duplicate_tool_names_across_skills() -> None:
             seen[tool.name] = skill.name
 
 
-def test_build_registry_registers_all_17_tools() -> None:
+def test_build_registry_registers_every_skill_tool() -> None:
     reg = build_registry()
-    assert len(reg.all_specs()) == 17
+    expected = sum(len(s.tools) for s in all_skills())
+    assert len(reg.all_specs()) == expected
 
 
 def test_build_default_registry_delegates_to_skills() -> None:
