@@ -7,16 +7,23 @@ Edith는 가장 최근 digest를 morning brief에 포함시킴. read-only.
 
 소스:
 - LocalDigestSource: 로컬 클론된 repo의 archive 파일 (JSON or markdown) 직접 읽기
-- (future) GitHubPagesDigestSource: https://sangho24.github.io/ds-digest/latest.json fetch
+- GitHubPagesDigestSource: https://sangho24.github.io/ds-digest/latest.json fetch (F14)
+
+GitHubPagesDigestSource는 fetch 함수를 inject 받는다 (telegram.py / vps.relay 패턴과 동일).
+이유: 테스트에서 실제 네트워크를 부르지 않고, httpx를 하드 의존성으로 만들지 않기 위해.
 """
 
 from __future__ import annotations
 
 import json
+import os
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+
+DEFAULT_PAGES_URL = "https://sangho24.github.io/ds-digest/latest.json"
 
 
 @dataclass
@@ -82,3 +89,59 @@ class LocalDigestSource(DigestSource):
             "items": items,
             "n": len(items),
         }
+
+
+def _httpx_fetch(url: str) -> str:
+    """기본 fetch — httpx로 GET. httpx는 lazy import (하드 의존성 회피)."""
+    import httpx
+
+    resp = httpx.get(url, timeout=10.0, follow_redirects=True)
+    resp.raise_for_status()
+    return resp.text
+
+
+class GitHubPagesDigestSource(DigestSource):
+    """ds-digest GitHub Pages 아카이브의 latest.json fetch (F14).
+
+    ds-digest 파이프라인이 매일 07:10 KST에 GitHub Pages로 publish하는
+    latest.json을 읽는다. 로컬 repo 클론이 없어도 동작 — VPS·핸드폰에서 유용.
+
+    네트워크 실패·잘못된 JSON은 빈 결과로 graceful degrade (morning brief가
+    digest 때문에 통째로 깨지면 안 되므로).
+    """
+
+    def __init__(
+        self,
+        url: str = DEFAULT_PAGES_URL,
+        fetch_fn: Callable[[str], str] | None = None,
+    ) -> None:
+        self.url = url
+        self._fetch = fetch_fn or _httpx_fetch
+
+    def latest(self) -> dict:
+        try:
+            body = self._fetch(self.url)
+        except Exception:
+            return {"date": None, "items": [], "n": 0}
+
+        try:
+            data = json.loads(body)
+        except json.JSONDecodeError:
+            return {"date": None, "items": [], "n": 0}
+
+        items = data.get("items", [])
+        return {"date": data.get("date"), "items": items, "n": len(items)}
+
+
+def get_digest_source(edith_home: Path) -> DigestSource:
+    """환경에 맞는 digest source 반환.
+
+    - EDITH_DS_DIGEST_URL 설정 → GitHubPagesDigestSource
+    - 그 외 → LocalDigestSource (raw/digest/latest.json)
+
+    EDITH_DS_DIGEST_LATEST(명시적 로컬 경로)는 tool 레이어에서 우선 처리됨.
+    """
+    url = os.environ.get("EDITH_DS_DIGEST_URL")
+    if url:
+        return GitHubPagesDigestSource(url)
+    return LocalDigestSource(edith_home / "raw" / "digest" / "latest.json")

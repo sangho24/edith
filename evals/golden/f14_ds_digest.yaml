@@ -1,0 +1,41 @@
+# Phase 4 F14 — ds-digest skill via runtime.
+id: f14_ds_digest
+phase: 4
+component: F14
+description: |
+  LLM이 "오늘 ds-digest에 뭐 있었어?" task를 받아 digest_latest tool로
+  최근 digest를 읽고 요약. ds-digest는 사용자 본인 repo (scope=personal).
+
+fixtures:
+  identity: "# Edith\n한국어 존댓말. 짧게.\n"
+  schema: "# Schema\nds-digest 질문은 digest_latest tool로 최근 결과 read.\n"
+  raw_files:
+    "raw/digest/latest.json": |
+      {
+        "date": "2026-05-14",
+        "items": [
+          {"title": "SAE로 본 transformer circuit", "source": "arxiv", "score": 9.1},
+          {"title": "Local LLM 추론 최적화 벤치", "source": "hn", "score": 8.3}
+        ]
+      }
+
+inputs:
+  task: "오늘 ds-digest에 뭐 있었어?"
+  scope: personal
+  budget_steps: 4
+  llm_responses:
+    - stop_reason: tool_use
+      content_blocks:
+        - type: tool_use
+          id: tu_1
+          name: digest_latest
+          input: {}
+    - stop_reason: end_turn
+      text: "2026-05-14 ds-digest에 2건 있습니다. arxiv의 'SAE로 본 transformer circuit', hn의 'Local LLM 추론 최적화 벤치'."
+
+expected:
+  finalize_reason: end_turn
+  n_steps: 2
+  tool_calls_made: 1
+  policy_blocks: 0
+  output_contains: ["ds-digest", "transformer circuit"]

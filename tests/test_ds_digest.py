@@ -1,11 +1,15 @@
-"""Phase 3 F4 — ds_digest source tests."""
+"""Phase 3 F4 / Phase 4 F14 — ds_digest source tests."""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-from harness.integrations.ds_digest import LocalDigestSource
+from harness.integrations.ds_digest import (
+    GitHubPagesDigestSource,
+    LocalDigestSource,
+    get_digest_source,
+)
 
 
 def test_empty_when_no_file(tmp_path: Path) -> None:
@@ -79,3 +83,60 @@ def test_markdown_skips_headers(tmp_path: Path) -> None:
     result = LocalDigestSource(p).latest()
     assert result["n"] == 1
     assert result["items"][0]["title"] == "item"
+
+
+# ── F14 GitHubPagesDigestSource ──────────────────────────────────────────
+
+
+def test_github_pages_parses_json() -> None:
+    body = json.dumps(
+        {
+            "date": "2026-05-14",
+            "items": [
+                {"title": "SAE circuit", "source": "arxiv", "score": 9.1},
+                {"title": "Local LLM bench", "source": "hn", "score": 8.3},
+            ],
+        }
+    )
+    src = GitHubPagesDigestSource(url="https://x/latest.json", fetch_fn=lambda _: body)
+    result = src.latest()
+    assert result["date"] == "2026-05-14"
+    assert result["n"] == 2
+    assert result["items"][0]["title"] == "SAE circuit"
+
+
+def test_github_pages_network_failure_is_graceful() -> None:
+    def boom(_: str) -> str:
+        raise ConnectionError("network down")
+
+    result = GitHubPagesDigestSource(url="https://x/latest.json", fetch_fn=boom).latest()
+    assert result == {"date": None, "items": [], "n": 0}
+
+
+def test_github_pages_corrupt_json_is_graceful() -> None:
+    src = GitHubPagesDigestSource(url="https://x/latest.json", fetch_fn=lambda _: "{nope")
+    assert src.latest()["n"] == 0
+
+
+def test_github_pages_passes_configured_url() -> None:
+    seen: list[str] = []
+
+    def spy(url: str) -> str:
+        seen.append(url)
+        return '{"items": []}'
+
+    GitHubPagesDigestSource(url="https://custom/path.json", fetch_fn=spy).latest()
+    assert seen == ["https://custom/path.json"]
+
+
+def test_get_digest_source_defaults_to_local(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("EDITH_DS_DIGEST_URL", raising=False)
+    src = get_digest_source(tmp_path)
+    assert isinstance(src, LocalDigestSource)
+
+
+def test_get_digest_source_uses_pages_when_url_set(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("EDITH_DS_DIGEST_URL", "https://sangho24.github.io/ds-digest/latest.json")
+    src = get_digest_source(tmp_path)
+    assert isinstance(src, GitHubPagesDigestSource)
+    assert src.url == "https://sangho24.github.io/ds-digest/latest.json"
