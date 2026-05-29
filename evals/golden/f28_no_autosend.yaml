@@ -1,0 +1,36 @@
+# F28 — 제안은 실행하지 않는다: external action_type가 있어도 proposed 상태로 저장만.
+id: f28_no_autosend
+phase: 5
+component: F28
+description: |
+  gmail_send step을 담은 제안을 해도 propose 시점엔 실행/발송이 없다. proposals.json에
+  status=proposed로 저장될 뿐, 승인 큐도 만들지 않는다(승인은 GUI에서 별도).
+fixtures:
+  identity: "# Edith\n한국어 존댓말. 짧게.\n"
+  schema: "# Schema\n작업은 propose_workflow로 제안.\n"
+inputs:
+  task: "메일 발송 워크플로우 제안"
+  scope: personal
+  budget_steps: 4
+  llm_responses:
+    - stop_reason: tool_use
+      content_blocks:
+        - type: tool_use
+          id: tu_1
+          name: propose_workflow
+          input:
+            title: "메일 발송"
+            steps:
+              - intent: "지도교수께 진행상황 메일"
+                action_type: "gmail_send"
+                support_refs: ["raw/mail/x.md"]
+                params: {to: "prof", subject: "진행상황"}
+                risk_score: 5
+    - stop_reason: end_turn
+      text: "제안만 등록했습니다. 승인 전에는 발송하지 않습니다."
+expected:
+  finalize_reason: end_turn
+  tool_calls_made: 1
+  policy_blocks: 0
+  files_contain:
+    "harness/proposals.json": ['"status": "proposed"', "gmail_send"]

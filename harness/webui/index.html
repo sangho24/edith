@@ -92,6 +92,7 @@
   <nav>
     <button data-tab="chat" class="on">💬 Chat</button>
     <button data-tab="brief">☀️ Brief</button>
+    <button data-tab="proposals">📋 Proposals</button>
     <button data-tab="approvals">✋ Approvals</button>
     <button data-tab="traces">📊 Traces</button>
   </nav>
@@ -104,6 +105,10 @@
   <section class="tab" id="tab-brief">
     <button class="reload" onclick="loadBrief()">↻ 새로고침</button>
     <pre class="brief" id="brief">불러오는 중…</pre>
+  </section>
+  <section class="tab" id="tab-proposals">
+    <button class="reload" onclick="loadProposals()">↻ 새로고침</button>
+    <div id="proposals"></div>
   </section>
   <section class="tab" id="tab-approvals">
     <button class="reload" onclick="loadApprovals()">↻ 새로고침</button>
@@ -183,8 +188,70 @@ document.querySelectorAll("nav button").forEach((b) => {
     if (b.dataset.tab === "brief") loadBrief();
     if (b.dataset.tab === "traces") loadTraces();
     if (b.dataset.tab === "approvals") loadApprovals();
+    if (b.dataset.tab === "proposals") loadProposals();
   };
 });
+
+async function loadProposals() {
+  const el = $("#proposals");
+  el.innerHTML = "";
+  let d;
+  try {
+    d = await (await fetch("/ui/proposals")).json();
+  } catch (e) { el.innerHTML = `<div class="empty">불러오기 실패: ${e}</div>`; return; }
+  if (!d.proposals || !d.proposals.length) {
+    el.innerHTML = `<div class="empty">대기 중인 제안 없음</div>`;
+    return;
+  }
+  for (const p of d.proposals) {
+    const card = document.createElement("div");
+    card.className = "approval";
+    const steps = p.steps.map((s) => {
+      const cite = s.support_refs && s.support_refs.length
+        ? s.support_refs.join(", ")
+        : "[추론 — 근거 없음]";
+      const ext = s.action_type ? ` · ${s.action_type}` : "";
+      return `<label style="display:block;margin:4px 0;">` +
+        `<input type="checkbox" data-idx="${s.idx}" checked> ` +
+        `<b>${s.idx}. ${s.intent}</b>${ext} <span class="${s.risk_score>=6?'risk':'risk low'}">risk ${s.risk_score}</span>` +
+        `<div class="tgt" style="margin-left:20px;">${s.explanation||""}` +
+        (s.expected_outcome?` → ${s.expected_outcome}`:"") +
+        `<br>근거: ${cite}</div></label>`;
+    }).join("");
+    card.innerHTML =
+      `<div class="hd"><span class="at"></span>` +
+      `<span class="tgt"></span></div><div class="rationale tgt"></div>` +
+      `<div class="steps">${steps}</div>` +
+      `<div class="acts" style="margin-top:10px;">` +
+      `<button class="yes">선택 승인</button><button class="no">거절</button></div>`;
+    card.querySelector(".at").textContent = `📋 ${p.title}`;
+    card.querySelector(".tgt").textContent = `scope ${p.scope} · ${p.steps.length} step`;
+    card.querySelector(".rationale").textContent = p.rationale ? `근거: ${p.rationale}` : "";
+    card.querySelector(".yes").onclick = () => {
+      const idxs = [...card.querySelectorAll("input:checked")].map((c) => +c.dataset.idx);
+      decideProposal(p.id, "accept", idxs);
+    };
+    card.querySelector(".no").onclick = () => decideProposal(p.id, "reject");
+    el.appendChild(card);
+  }
+}
+
+async function decideProposal(id, decision, accepted_steps) {
+  try {
+    const body = { id, decision };
+    if (accepted_steps) body.accepted_steps = accepted_steps;
+    const r = await fetch("/ui/proposals/decide", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const d = await r.json();
+    if (!d.ok) alert("실패: " + (d.error || r.status));
+    else if (decision === "accept")
+      alert(`✓ ${(d.queued_approvals||[]).length}개 step이 승인 큐로 — Approvals 탭에서 실행하세요.`);
+  } catch (e) { alert("네트워크 오류: " + e); }
+  loadProposals();
+}
 
 async function loadBrief() {
   const el = $("#brief");

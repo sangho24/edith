@@ -47,6 +47,7 @@ def all_skills() -> list[Skill]:
         mail,
         mcp_skill,
         papers,
+        proposal,
         recall,
         repo,
     )
@@ -62,6 +63,7 @@ def all_skills() -> list[Skill]:
         jd.SKILL,
         health.SKILL,
         mcp_skill.SKILL,
+        proposal.SKILL,
     ]
 
 

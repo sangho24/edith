@@ -74,6 +74,69 @@ def test_r3_ds_digest_blocked_in_school_task() -> None:
     assert reason is not None and "R3" in reason
 
 
+# ── F23 — propose_workflow 우회 차단 + 동적 tool 등록 ──────────────────
+
+
+def test_f23_propose_clean_steps_allowed() -> None:
+    args = {"steps": [{"action_type": "calendar_create", "scope": "personal", "params": {}}]}
+    allowed, reason = policies.allow("propose_workflow", args, scope="personal")
+    assert allowed
+    assert reason is None
+
+
+def test_f23_propose_cross_scope_step_blocked() -> None:
+    """personal task 제안에 work scope step → 차단."""
+    args = {"steps": [{"action_type": "gmail_send", "scope": "work", "params": {}}]}
+    allowed, reason = policies.allow("propose_workflow", args, scope="personal")
+    assert not allowed
+    assert reason is not None and "F23/R3" in reason
+
+
+def test_f23_propose_pii_in_params_blocked() -> None:
+    """step.params에 PII → 차단 (제안에 PII 영속 방지)."""
+    args = {
+        "steps": [
+            {"action_type": "gmail_send", "scope": "personal",
+             "params": {"body": "내 주민번호 900101-1234567"}}
+        ]
+    }
+    allowed, reason = policies.allow("propose_workflow", args, scope="personal")
+    assert not allowed
+    assert reason is not None and "F23/R4" in reason
+
+
+def test_f23_propose_mixed_task_allows_any_scope() -> None:
+    args = {"steps": [{"action_type": "gmail_send", "scope": "work", "params": {}}]}
+    allowed, _ = policies.allow("propose_workflow", args, scope="mixed")
+    assert allowed
+
+
+def test_f23_check_proposal_steps_direct() -> None:
+    ok, _ = policies.check_proposal_steps([{"action_type": "x", "params": {"to": "a@b.com"}}],
+                                          task_scope="personal")
+    assert not ok  # 이메일 PII
+
+
+def test_f23_register_external_write_tool() -> None:
+    name = "test_dynamic_send_f23"
+    try:
+        allowed, _ = policies.allow(name, {}, scope="personal")
+        assert allowed  # 등록 전엔 통과
+        policies.register_external_write_tool(name)
+        allowed, reason = policies.allow(name, {}, scope="personal")
+        assert not allowed and reason is not None and "R2" in reason
+    finally:
+        policies.EXTERNAL_WRITE_TOOLS.discard(name)
+
+
+def test_f23_invalidate_tool_scopes_cache() -> None:
+    from harness.skills import tool_scopes
+
+    tool_scopes()  # warm
+    policies.invalidate_tool_scopes_cache()  # 예외 없이 동작
+    assert tool_scopes().get("health_summary") == "personal"
+
+
 def test_r4_redact_email() -> None:
     text = "Email me at sam9787@naver.com"
     redacted, counts = policies.redact_pii(text)

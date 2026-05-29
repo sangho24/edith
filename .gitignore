@@ -23,6 +23,9 @@ harness/suggestions.json
 harness/suggestion_feedback.jsonl
 harness/trigger_state.json
 
+# Phase 5.2 F28 — proposal store (machine-local)
+harness/proposals.json
+
 # Phase 3 F11/F12 — docker .env (machine-local)
 docker/.env
 vps/.env

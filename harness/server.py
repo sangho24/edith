@@ -295,6 +295,96 @@ def make_app(
             }
         )
 
+    # ── F28 워크플로우 제안 ──────────────────────────────────────────
+    def _proposal_store() -> Any:
+        from harness.propose import ProposalStore
+
+        return ProposalStore(home / "harness" / "proposals.json")
+
+    @app.get("/ui/proposals")
+    def ui_proposals() -> dict[str, Any]:
+        """proposed 상태 제안 목록 (GUI Proposals 탭)."""
+        store = _proposal_store()
+        return {
+            "ok": True,
+            "proposals": [
+                {
+                    "id": p.id,
+                    "title": p.title,
+                    "scope": p.scope,
+                    "rationale": p.rationale,
+                    "steps": [
+                        {
+                            "idx": s.idx,
+                            "intent": s.intent,
+                            "explanation": s.explanation,
+                            "expected_outcome": s.expected_outcome,
+                            "risk_note": s.risk_note,
+                            "support_refs": s.support_refs,
+                            "action_type": s.action_type,
+                            "reversible": s.reversible,
+                            "risk_score": s.risk_score,
+                            "inferred": s.inferred,
+                        }
+                        for s in p.steps
+                    ],
+                }
+                for p in store.list(status="proposed")
+            ],
+        }
+
+    @app.post("/ui/proposals/decide")
+    async def ui_proposals_decide(request: Request) -> JSONResponse:
+        """제안 승인/거절. body: {id, decision: accept|reject, accepted_steps?: [idx]}.
+
+        accept 시 (선택된) step별로 ApprovalQueue에 pending 등록 — 자동 실행 안 함
+        ("승인만"). 실제 실행은 Approvals 탭에서. external write가 아닌(action_type 빈)
+        step은 큐 생성 생략(즉시 처리 대상 아님 — v1은 큐 등록만 추적).
+        """
+        try:
+            payload = await request.json()
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"invalid json: {e}") from e
+        pid = payload.get("id", "")
+        decision = payload.get("decision", "")
+        if not pid or decision not in ("accept", "reject"):
+            raise HTTPException(status_code=400, detail="id + decision(accept|reject) required")
+
+        store = _proposal_store()
+        proposal = store.get(pid)
+        if proposal is None or proposal.status != "proposed":
+            return JSONResponse(
+                {"ok": False, "error": "제안 없음 또는 이미 처리됨"}, status_code=400
+            )
+
+        if decision == "reject":
+            store.close(pid)
+            return JSONResponse({"ok": True, "id": pid, "status": "rejected"})
+
+        accepted = payload.get("accepted_steps")  # None이면 전체
+        queue = _approval_queue()
+        queued: list[str] = []
+        for step in proposal.steps:
+            if accepted is not None and step.idx not in accepted:
+                continue
+            if not step.action_type:
+                continue  # internal step — 큐 대상 아님
+            req = queue.create(
+                action_type=step.action_type,
+                target_system=step.action_type.split("_")[0],
+                preview=step.preview(),
+                params=step.params,
+                risk_score=step.risk_score,
+                reversible=step.reversible,
+                scope=proposal.scope,
+            )
+            queued.append(req.id)
+        store.close(pid)
+        return JSONResponse(
+            {"ok": True, "id": pid, "status": "accepted", "queued_approvals": queued,
+             "note": "승인 큐에 등록됨 — Approvals 탭에서 실행."}
+        )
+
     @app.post("/ask")
     async def ask(request: Request) -> JSONResponse:
         """단순 query 진입점. iPhone Shortcut / Telegram 등."""

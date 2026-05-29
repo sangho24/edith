@@ -1,0 +1,43 @@
+# F28 — propose_workflow 기본: tool 1회 호출, ApprovalRequest 0건(저장만).
+id: f28_propose_basic
+phase: 5
+component: F28
+description: |
+  LLM이 propose_workflow로 2-step 워크플로우를 제안 → proposed 저장 → end_turn.
+  제안 단계에선 어떤 external write도 실행/큐잉되지 않음(승인 전).
+fixtures:
+  identity: "# Edith\n한국어 존댓말. 짧게.\n"
+  schema: "# Schema\n작업은 propose_workflow로 근거와 함께 제안.\n"
+inputs:
+  task: "ICLR 리뷰 어떻게 처리할지 워크플로우 짜줘"
+  scope: personal
+  budget_steps: 4
+  llm_responses:
+    - stop_reason: tool_use
+      content_blocks:
+        - type: tool_use
+          id: tu_1
+          name: propose_workflow
+          input:
+            title: "ICLR 리뷰 처리"
+            rationale: "마감 2일 전, 미답 상태"
+            steps:
+              - intent: "리뷰 2h 캘린더 블록"
+                explanation: "집중 시간 확보"
+                expected_outcome: "리뷰 시간 확정"
+                support_refs: ["raw/mail/2026-05-29.md"]
+                action_type: "calendar_create"
+                params: {title: "ICLR 리뷰", duration_min: 120}
+                risk_score: 3
+              - intent: "리뷰 초안 wiki 페이지"
+                support_refs: ["wiki/concepts/transformer_interpretability.md"]
+                action_type: ""
+                risk_score: 2
+    - stop_reason: end_turn
+      text: "제안 1건 등록했습니다 — Proposals 탭에서 검토·승인하세요."
+expected:
+  finalize_reason: end_turn
+  n_steps: 2
+  tool_calls_made: 1
+  policy_blocks: 0
+  output_contains: ["제안", "Proposals"]
