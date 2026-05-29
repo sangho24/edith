@@ -89,6 +89,9 @@ jd:
 weekly:
 	uv run harness weekly
 
+tick:
+	uv run harness tick
+
 # ── F11 Home Hub (docker) ──
 
 hub-up:

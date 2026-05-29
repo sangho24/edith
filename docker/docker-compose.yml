@@ -31,6 +31,7 @@ services:
       0 22 * * * python -m harness.cli daily
       0 21 * * 0 python -m harness.cli weekly
       0 8 * * * python -m harness.cli brief
+      */10 * * * * python -m harness.cli tick
       EOF
       pip install --quiet supercronic-bin || pip install --quiet supercronic 2>/dev/null
       python -c 'from time import sleep; import subprocess; \

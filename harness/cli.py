@@ -391,6 +391,40 @@ def weekly(days: int) -> None:
 
 
 @main.command()
+@click.option("--now", default=None, help="평가 기준 시각 ISO (테스트/디버그용)")
+@click.option("--tick-seconds", default=600, type=int, help="tick 간격(초)")
+def tick(now: str | None, tick_seconds: int) -> None:
+    """F19 스케줄러 tick — 트리거 평가 + 선제 체크인 push (cron이 매 N분 호출).
+
+    TELEGRAM_BOT_TOKEN·TELEGRAM_CHAT_ID 있으면 그 채널로 push, 없으면 stdout만.
+    """
+    import os
+
+    from harness.scheduler import run_tick
+
+    home = _edith_home()
+    channel = None
+    recipient = None
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+    if token and chat_id.isdigit():
+        from harness.integrations.channel import TelegramChannel
+        from harness.integrations.telegram import TelegramClient
+
+        channel = TelegramChannel(TelegramClient(token=token, allowed_chat_ids={int(chat_id)}))
+        recipient = chat_id
+
+    result = run_tick(home, now_iso=now, channel=channel, recipient=recipient,
+                      tick_seconds=tick_seconds)
+    if result["fired"]:
+        click.echo(f"fired: {', '.join(result['fired'])}")
+    for text in result["pushed"]:
+        click.echo(f"push → {text}")
+    if not result["fired"]:
+        click.echo("(no trigger fired this tick)")
+
+
+@main.command()
 @click.argument("arxiv_input")
 def paper(arxiv_input: str) -> None:
     """Paper triage (F8) — arxiv URL/ID → 메타데이터 + wiki summary path 제안."""
