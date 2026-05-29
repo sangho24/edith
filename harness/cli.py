@@ -432,7 +432,7 @@ def seed_demo_cmd(force: bool, date_str: str | None) -> None:
     """체감 데모용 raw/ 샘플 시드 (mail·calendar·digest·health·reading)."""
     from datetime import date as _date
 
-    from harness.seed_demo import seed_demo
+    from harness.seed_demo import seed_demo, seed_demo_proposal
 
     home = _edith_home()
     target = _date.fromisoformat(date_str) if date_str else None
@@ -444,6 +444,11 @@ def seed_demo_cmd(force: bool, date_str: str | None) -> None:
         click.echo(f"  · skip (이미 있음): {r}")
     if result["skipped"] and not force:
         click.echo("  (덮어쓰려면 --force)")
+    prop = seed_demo_proposal(home, force=force)
+    if prop["created"]:
+        click.echo(f"  + 데모 제안 1건 (id={prop['proposal_id']}) → GUI Proposals 탭")
+    else:
+        click.echo(f"  · 데모 제안 이미 있음 (id={prop['proposal_id']})")
     click.echo("\n다음:")
     click.echo("  harness demo       # CLI 한 화면 시연 (brief + 선제 제안)")
     click.echo("  make serve-demo    # GUI 확인 → http://127.0.0.1:8765")
@@ -462,7 +467,7 @@ def demo(now_iso_opt: str | None, no_seed: bool) -> None:
 
     from harness.initiative import preview_checkin
     from harness.morning import compose_brief
-    from harness.seed_demo import KST, seed_demo
+    from harness.seed_demo import KST, seed_demo, seed_demo_proposal
 
     home = _edith_home()
     if now_iso_opt:
@@ -477,6 +482,9 @@ def demo(now_iso_opt: str | None, no_seed: bool) -> None:
             click.echo(f"✓ 시드 생성 ({res['date']}): {', '.join(res['written'])}")
         else:
             click.echo(f"· 시드 이미 존재 ({res['date']}) — 보존")
+        prop = seed_demo_proposal(home, force=False)
+        verb = "생성" if prop["created"] else "존재"
+        click.echo(f"· 데모 제안 {verb} (id={prop['proposal_id']}) → GUI Proposals 탭")
 
     # 데모는 seed 일정을 읽어야 하므로 EventKit/실데이터 override env 정리 후 fixture 지정.
     for k in (

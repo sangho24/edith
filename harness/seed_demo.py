@@ -243,14 +243,120 @@ def seed_demo(
     return {"date": d.isoformat(), "written": written, "skipped": skipped}
 
 
+# ── 데모 제안 (Proposals/Approvals 탭 체험용) ──
+#
+# LLM 키 없이도 GUI에서 "제안 검토 → 부분 승인 → 실행" 전체 루프를 클릭해볼 수 있게
+# 샘플 Proposal을 proposals.json에 심는다. external step 중 하나(github_workflow_update_cron)는
+# 실제로 실행되어 머신 로컬 데모 워크플로우 파일의 cron을 바꾼다(가역). gmail_send step은
+# OAuth 미설정 시 실행 단계에서 안전하게 차단되는 경계를 보여준다.
+
+DEMO_WORKFLOW_RELPATH = "harness/demo_workflow.yml"  # 머신 로컬(gitignore), external 실행 대상
+DEMO_PROPOSAL_TRIGGER = "demo"
+
+
+def build_demo_workflow() -> str:
+    """cron 한 줄이 있는 최소 GitHub Actions 워크플로우(데모 external 실행 대상)."""
+    return (
+        "name: demo-ds-digest\n"
+        "on:\n"
+        "  schedule:\n"
+        "    - cron: '10 22 * * *'  # 07:10 KST\n"
+        "jobs:\n"
+        "  build:\n"
+        "    runs-on: ubuntu-latest\n"
+        "    steps:\n"
+        "      - run: echo demo\n"
+    )
+
+
+def seed_demo_proposal(edith_home: Path, force: bool = False) -> dict:
+    """데모 Proposal 1건 + 데모 워크플로우 파일을 심는다(멱등).
+
+    이미 proposed 상태의 데모 제안이 있으면 새로 만들지 않는다(반복 실행해도 누적 X).
+    사용자가 그 제안을 처리(accept/reject로 close)한 뒤 다시 부르면 새 제안을 만든다.
+
+    Returns:
+        {"created": bool, "proposal_id": str, ...}.
+    """
+    from harness.integrations.github_workflow import cron_for_kst_time
+    from harness.propose import ProposalStep, ProposalStore
+
+    wf = edith_home / DEMO_WORKFLOW_RELPATH
+    if force or not wf.exists():
+        wf.parent.mkdir(parents=True, exist_ok=True)
+        wf.write_text(build_demo_workflow(), encoding="utf-8")
+
+    store = ProposalStore(edith_home / "harness" / "proposals.json")
+    existing = [
+        p for p in store.list(status="proposed") if p.trigger == DEMO_PROPOSAL_TRIGGER
+    ]
+    if existing and not force:
+        return {"created": False, "proposal_id": existing[0].id, "reason": "already-proposed"}
+
+    steps = [
+        ProposalStep(
+            idx=0,
+            intent="이번 주 ds-digest 하이라이트를 wiki로 정리",
+            explanation="digest 2건을 요약해 concepts 페이지에 누적 — 내부 작업, 승인 불필요.",
+            expected_outcome="wiki/concepts/ds-digest-주간.md 갱신",
+            support_refs=["raw/digest/latest.json"],
+            action_type="",  # internal → 승인 큐 대상 아님
+            reversible=True,
+            risk_score=2,
+        ),
+        ProposalStep(
+            idx=1,
+            intent="ds-digest 발송 시각 07:10 → 08:00 (KST)로 변경",
+            explanation="아침 brief 시점과 맞춰 digest 미정리 누적을 줄임.",
+            expected_outcome="워크플로우 cron 변경(파일 수정; commit·push는 별도).",
+            risk_note="가역 — 언제든 되돌릴 수 있음.",
+            support_refs=[DEMO_WORKFLOW_RELPATH],
+            action_type="github_workflow_update_cron",
+            params={
+                "workflow_path": DEMO_WORKFLOW_RELPATH,
+                "new_cron": cron_for_kst_time(8, 0),
+            },
+            reversible=True,
+            risk_score=4,
+        ),
+        ProposalStep(
+            idx=2,
+            intent="digest 요약을 본인 메일로 발송",
+            explanation="외부 발송 — 승인 + Gmail OAuth 필요. 미설정이면 실행 단계에서 안전 차단.",
+            expected_outcome="요약 메일 1통.",
+            risk_note="비가역(발송). OAuth 없으면 실행되지 않음.",
+            support_refs=["raw/digest/latest.json"],
+            action_type="gmail_send",
+            params={
+                "to": "demo@example.com",
+                "subject": "[데모] ds-digest 요약",
+                "body": "데모 본문 — 실제 발송은 OAuth 설정 후.",
+            },
+            reversible=False,
+            risk_score=6,
+        ),
+    ]
+    p = store.create(
+        title="ds-digest 운영 개선 (발송시각 조정 + 요약 메일)",
+        rationale="오늘 digest 2건 도착 + 아침 brief와 시점 불일치 — 운영 흐름 정리 제안.",
+        scope="personal",
+        steps=steps,
+        trigger=DEMO_PROPOSAL_TRIGGER,
+    )
+    return {"created": True, "proposal_id": p.id, "workflow": DEMO_WORKFLOW_RELPATH}
+
+
 __all__ = [
+    "DEMO_WORKFLOW_RELPATH",
     "KST",
     "SeedFile",
     "build_calendar",
+    "build_demo_workflow",
     "build_digest",
     "build_health",
     "build_mail",
     "build_reading",
     "seed_demo",
+    "seed_demo_proposal",
     "seed_files",
 ]

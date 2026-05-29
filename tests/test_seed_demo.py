@@ -13,7 +13,15 @@ from harness.initiative import (
     preview_checkin,
     reading_suggestions,
 )
-from harness.seed_demo import KST, build_calendar, build_reading, seed_demo, seed_files
+from harness.propose import ProposalStore
+from harness.seed_demo import (
+    KST,
+    build_calendar,
+    build_reading,
+    seed_demo,
+    seed_demo_proposal,
+    seed_files,
+)
 
 D = date(2026, 5, 29)
 
@@ -81,3 +89,59 @@ def test_seed_demo_produces_five_categories(
     pv = preview_checkin(tmp_path, "morning", now_iso=now_iso)
     cats = {s["category"] for s in pv["ranked"]}
     assert {"urgent_mail", "calendar_conflict", "ds_digest", "health", "reading_stale"} <= cats
+
+
+# ── 데모 제안 (Proposals/Approvals 루프) ──
+
+
+def test_seed_proposal_creates_proposed_with_steps(tmp_path: Path) -> None:
+    res = seed_demo_proposal(tmp_path)
+    assert res["created"]
+    store = ProposalStore(tmp_path / "harness" / "proposals.json")
+    props = store.list(status="proposed")
+    assert len(props) == 1
+    p = props[0]
+    # 내부 1 + 외부 2 (action_type 있는 step만 승인 큐로 내려감)
+    external = [s for s in p.steps if s.action_type]
+    assert len(external) == 2
+    assert any(s.action_type == "github_workflow_update_cron" for s in external)
+    assert (tmp_path / "harness" / "demo_workflow.yml").exists()
+
+
+def test_seed_proposal_idempotent(tmp_path: Path) -> None:
+    a = seed_demo_proposal(tmp_path)
+    b = seed_demo_proposal(tmp_path)
+    assert a["created"] and not b["created"]
+    assert b["proposal_id"] == a["proposal_id"]
+
+
+def test_seed_proposal_cron_step_actually_executes(tmp_path: Path) -> None:
+    """데모 cron step을 승인 큐→executor로 실행하면 워크플로우 cron이 실제로 바뀐다."""
+    from harness.approval import ApprovalQueue
+    from harness.executor import ApprovalExecutor
+    from harness.integrations.github_workflow import get_crons
+
+    seed_demo_proposal(tmp_path)
+    wf = tmp_path / "harness" / "demo_workflow.yml"
+    before = get_crons(wf)
+
+    store = ProposalStore(tmp_path / "harness" / "proposals.json")
+    step = next(
+        s
+        for s in store.list(status="proposed")[0].steps
+        if s.action_type == "github_workflow_update_cron"
+    )
+    queue = ApprovalQueue(tmp_path / "harness" / "approvals.json")
+    req = queue.create(
+        action_type=step.action_type,
+        target_system="github",
+        preview=step.preview(),
+        params=step.params,
+        risk_score=step.risk_score,
+        reversible=step.reversible,
+        scope="personal",
+    )
+    queue.approve(req.id)
+    result = ApprovalExecutor(queue, tmp_path).execute(req.id)
+    assert result.ok, result.error
+    assert get_crons(wf) != before  # cron 변경됨 (가역 외부 액션 실증)
