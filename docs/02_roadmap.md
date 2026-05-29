@@ -470,6 +470,33 @@ Phase 4부터 feature를 **빌드 하네스**로 짓는다 — `docs/05_cc_harne
 
 ---
 
+## 4.5 Phase 5 — 선제적·자기확장 (진행 중)
+
+> 상세 PRD: `docs/08_prd_phase5_proactive.md`. 비전: MCP 추천·생태계 연동 → 선제적으로
+> 묻고 워크플로우 제안 → 코딩으로 해결·skill 자동생성 → 반복 패턴 자동 트리거.
+> 자율성 상한 **L3**(승인 후 실행), 모든 자율성은 approval·scope·eval·인용 4게이트 통과.
+
+| ID | Feature | 상태 |
+|---|---|---|
+| F18 | MCP runtime bridge (`make_mcp_tool`·`McpToolSpec`) | ✅ spike(mock 검증). 실 client 연결은 backlog F3 |
+| F20 | eval 러너 확장 (`kind:call`·`register_tools`) | ✅ |
+| F21 | per-item scope 태깅 (`ApprovalRequest.scope`) | ✅ |
+| F23 | 정책 하드닝 (propose_workflow R2 우회 차단·동적 R2 등록) | ✅ |
+| F24 | 발신 PII 게이트 R5 (`Channel.send` chokepoint) | ✅ |
+| F26 | 선제 엔진 (`run_checkin`·PushGate·suppression·anti-atrophy) | ✅ |
+| F27 | 컨텍스트 트리거 (`evaluate` tick-window·dedup·quiet_hours·toggle) | ✅ |
+| F28 | 워크플로우 제안 (`propose_workflow`·Proposal·GUI 탭·partial accept) | ✅ |
+| F29a | MCP 추천기 (`recommend_mcp`, pull-only) | ✅ |
+| F19 | 스케줄러 wiring (`run_tick`·`harness tick`·docker cron */10) | ✅ |
+| F30~F35 | code-to-skill·pattern auto·memory 집계·MCP OAuth | 후속 |
+
+**연결된 비전 루프**: 트리거(시간)→선제 체크인(먼저 묻기, F26)→제안(F28)→승인→
+실행(F17 executor)→MCP 추천(F29a). 미완: 실 MCP 연결(F3), code-to-skill(F30),
+반복 패턴 자동화(F31), 메모리 학습 집계(F33). 스케줄러 실구동은 사용자 머신
+(docker edith-cron / launchd) 필요.
+
+---
+
 ## 5. 12주 한 흐름
 
 ```
