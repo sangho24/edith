@@ -1,0 +1,14 @@
+# F20 — kind:call 예외 단언. raises로 방어 코드 검증.
+id: f20_call_raises
+kind: call
+phase: 5
+component: F20
+description: |
+  _resolve에 'module:attr' 형식이 아닌 값을 넘기면 ValueError를 던진다.
+  call 케이스의 raises 단언이 동작함을 보인다.
+target: harness.eval:_resolve
+inputs:
+  kwargs:
+    target: "no_colon_here"
+expected:
+  raises: ValueError

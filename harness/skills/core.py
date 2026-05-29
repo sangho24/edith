@@ -28,5 +28,7 @@ SKILL = Skill(
         "evals/golden/f4_morning_brief.yaml",
         "evals/golden/f5_approval_flow.yaml",
         "evals/golden/a2_wiki_scope_block.yaml",
+        "evals/golden/f20_call_demo.yaml",
+        "evals/golden/f20_call_raises.yaml",
     ],
 )

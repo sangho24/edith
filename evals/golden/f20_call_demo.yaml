@@ -1,0 +1,22 @@
+# F20 — kind:call 케이스 데모. runtime.run을 안 거치고 함수 직접 호출 + 반환값 단언.
+id: f20_call_demo
+kind: call
+phase: 5
+component: F20
+description: |
+  read_workflow($home/wf.yml)를 직접 호출해 파싱된 dict의 키를 단언한다.
+  내부 함수 반환값을 golden으로 검증할 수 있음을 보인다 (push ledger·suppression 등 응용).
+target: harness.integrations.github_workflow:read_workflow
+fixtures:
+  raw_files:
+    "wf.yml": |
+      name: demo-workflow
+      jobs:
+        run:
+          runs-on: ubuntu-latest
+inputs:
+  kwargs:
+    workflow_path: "$home/wf.yml"
+expected:
+  returns_contains:
+    name: demo-workflow

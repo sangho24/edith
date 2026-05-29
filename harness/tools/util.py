@@ -44,6 +44,7 @@ def _request_approval(args: dict[str, Any], ctx: Context) -> dict[str, Any]:
         reversible=args.get("reversible", True),
         expires_minutes=args.get("expires_minutes", 30),
         params=args.get("params", {}),
+        scope=ctx.scope,  # F21 — task scope를 승인 요청에 각인 (scope별 격리·감사)
     )
     return {
         "queued": True,

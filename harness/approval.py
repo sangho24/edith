@@ -35,6 +35,10 @@ class ApprovalRequest:
     # 실행에 필요한 구조화된 인자. executor가 이걸 보고 실제 action 수행.
     # preview는 사람용, params는 기계용. 비어있으면 executor가 실행 불가.
     params: dict = field(default_factory=dict)
+    # F21 — 이 action이 속한 scope (personal|school|work|mixed). request_approval이
+    # ctx.scope를 전달. memory feedback·pattern·trace 감사가 scope별 격리하려면 필요.
+    # 하위호환: 기존 직렬화 레코드엔 없으므로 default "personal".
+    scope: str = "personal"
 
     @classmethod
     def new(
@@ -46,6 +50,7 @@ class ApprovalRequest:
         reversible: bool = True,
         expires_minutes: int = 30,
         params: dict | None = None,
+        scope: str = "personal",
     ) -> ApprovalRequest:
         now = datetime.now(UTC)
         return cls(
@@ -59,6 +64,7 @@ class ApprovalRequest:
             requested_at=now.isoformat(),
             expires_at=(now + timedelta(minutes=expires_minutes)).isoformat(),
             params=params or {},
+            scope=scope,
         )
 
     def is_expired(self, now: datetime | None = None) -> bool:
@@ -95,6 +101,7 @@ class ApprovalQueue:
         reversible: bool = True,
         expires_minutes: int = 30,
         params: dict | None = None,
+        scope: str = "personal",
     ) -> ApprovalRequest:
         req = ApprovalRequest.new(
             action_type=action_type,
@@ -104,6 +111,7 @@ class ApprovalQueue:
             reversible=reversible,
             expires_minutes=expires_minutes,
             params=params,
+            scope=scope,
         )
         all_ = self._load_all()
         all_.append(req)

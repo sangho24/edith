@@ -25,6 +25,9 @@ class IncomingMessage:
     text: str
     sender_name: str = ""
     raw: dict[str, Any] = field(default_factory=dict)
+    # F21 — 이 메시지가 속한 scope. 분류 전 기본 personal (가장 보수적).
+    # scope 휴리스틱(발신 도메인 등)은 후속; 지금은 per-item scope 필드만 마련.
+    scope: str = "personal"
 
     @property
     def is_command(self) -> bool:

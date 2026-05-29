@@ -364,6 +364,8 @@ Phase 5는 **신규 인프라를 거의 만들지 않는다**. 기존 13개 자�
 
 각 feature는 **eval YAML 먼저**(step1). 의존성·순서는 완전성 비평 sequencing 반영. **STEP 0~3은 어느 facet도 소유하지 않은 공유 차단 선행조건** — 반드시 먼저.
 
+> **D2=병행 반영**: F35(MCP OAuth + credential store)를 5.4 → **5.1로 당김**. Phase 5.0에 credential store 골격(`harness/mcp/credentials.py`, gitignore token 저장)을 포함하고, F29(mcp v1)가 무인증(youtube/naver)·OAuth(google/notion)를 함께 등록한다. 단 bridge spike(F18) 성공이 여전히 전제.
+
 ### Phase 5.0 — 차단 선행조건 (Blocking Prerequisites)
 
 | ID | Feature | 내용 | 의존 |
@@ -449,7 +451,17 @@ Phase 5는 **신규 인프라를 거의 만들지 않는다**. 기존 13개 자�
 
 ## 8. 결정 필요 사항 (사용자 검토용)
 
-각 항목: **옵션 + 추천**. 사용자가 검토 시 고른다.
+### 8.0 확정된 결정 (2026-05-14 검토)
+
+| # | 확정 | 영향 |
+|---|---|---|
+| **D1** | **L3(execute) 상한** — 추천대로. L4(auto)는 5.4 보류 | §7 그대로 |
+| **D2** | **무인증 read + 구글 OAuth 병행** — 추천(무인증 먼저)과 달리 둘 다 v1 | **로드맵 변경**: F35(OAuth+credential store)를 Phase 5.4 → **5.1로 당김**. F29가 youtube/naver(무인증)와 google/notion(oauth)을 함께 다룸. Phase 5.0에 credential store 골격 추가 |
+| **D7** | **사람 수동 등록** — 추천대로. SkillRegistrar 자동편집 없음 | §4.5 그대로 |
+
+나머지 D3~D6, D8~D17은 아래 표의 **추천값으로 확정**.
+
+각 항목: **옵션 + 추천**. (D1/D2/D7은 위에서 확정됨.)
 
 ### 8.1 시스템 전역 결정 (must_decide)
 
@@ -508,3 +520,4 @@ Phase 5는 **신규 인프라를 거의 만들지 않는다**. 기존 13개 자�
 ## 변경 이력
 
 - 2026-05-14 v0.1 — Phase 5 PRD 초안. 8개 서브시스템 설계·적대적 검토·완전성 비평을 통합. 핵심 결정: 자율성 상한 L3, MCP는 (b)1:1 래핑+무인증 read 먼저, 등록은 사람 수동, anti-atrophy/push budget 단일화, STEP 0(bridge·스케줄러·eval러너·scope)을 차단 선행조건으로 분리. 과설계 컷: code-to-skill SkillRegistrar·trace 마이닝, memory wiki 미러·proactivity_gate, pattern trust ladder·auto, proactive 양방향·LLM why를 v1에서 제거.
+- 2026-05-14 v0.2 — 검토 결정 확정(§8.0): D1=L3 상한, **D2=무인증 read + 구글 OAuth 병행**(F35를 5.1로 당김, credential store 골격을 5.0에), D7=수동 등록. 나머지는 추천값 확정. 구현 착수: F21(scope 태깅)·F20(eval 러너 확장)부터.

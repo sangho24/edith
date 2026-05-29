@@ -25,6 +25,62 @@ def test_create_pending(queue: ApprovalQueue) -> None:
     assert req.id
     assert req.risk_score == 5
     assert req.reversible is True
+    assert req.scope == "personal"  # F21 default
+
+
+# ── F21 per-item scope ───────────────────────────────────────────────────
+
+
+def test_create_records_scope(queue: ApprovalQueue) -> None:
+    req = queue.create("gmail_send", "gmail", "p", scope="work")
+    assert req.scope == "work"
+    # 영속 후에도 보존
+    fetched = queue.get(req.id)
+    assert fetched is not None and fetched.scope == "work"
+
+
+def test_request_approval_tool_stamps_ctx_scope(tmp_path: Path) -> None:
+    """request_approval tool이 ctx.scope를 승인 요청에 각인 (F21)."""
+    from harness.state import Context, Trace
+    from harness.tools.util import _request_approval
+
+    (tmp_path / "harness").mkdir()
+    ctx = Context(edith_home=tmp_path, scope="work", trace=Trace.start("t", scope="work"))
+    out = _request_approval(
+        {"action": "gmail_send", "preview": "메일", "params": {"to": "x@y.com"}}, ctx
+    )
+    assert out["queued"]
+    q = ApprovalQueue(tmp_path / "harness" / "approvals.json")
+    fetched = q.get(out["queue_id"])
+    assert fetched is not None and fetched.scope == "work"
+
+
+def test_legacy_record_without_scope_defaults_personal(tmp_path: Path) -> None:
+    """scope 필드 없던 구버전 approvals.json 로드 시 default personal (하위호환)."""
+    import json
+
+    p = tmp_path / "approvals.json"
+    p.write_text(
+        json.dumps(
+            [
+                {
+                    "id": "legacy123",
+                    "action_type": "gmail_send",
+                    "target_system": "gmail",
+                    "preview": "old",
+                    "risk_score": 5,
+                    "reversible": True,
+                    "status": "pending",
+                    "requested_at": "2026-05-01T00:00:00+00:00",
+                    "expires_at": "2026-05-01T00:30:00+00:00",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    q = ApprovalQueue(p)
+    legacy = q.get("legacy123")
+    assert legacy is not None and legacy.scope == "personal"
 
 
 def test_list_filters_by_status(queue: ApprovalQueue) -> None:

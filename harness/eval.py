@@ -1,11 +1,18 @@
-"""H4 — Eval runner.
+"""H4 / F20 — Eval runner.
 
 evals/golden/*.yaml의 케이스를 일괄 실행하고 expected vs actual 검증.
 새 feature는 PR에 골든 케이스 동봉 필수. 골든 100% pass 못하면 머지 거부.
+
+케이스 종류(`kind`):
+- "runtime" (기본) — runtime.run(MockLLM)으로 agent loop 실행, trace 단언.
+  fixtures.register_tools로 미등록 skill의 tool을 격리 registry에 주입 가능(F20).
+- "call" — runtime을 안 거치고 함수(module:attr)를 직접 호출, 반환값·예외·파일 단언.
+  push ledger 카운트·suppression 같은 내부 상태를 단언하려면 이 타입 사용.
 """
 
 from __future__ import annotations
 
+import importlib
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -17,6 +24,7 @@ import yaml
 from harness.llm import LLMResponse, MockLLM
 from harness.runtime import run
 from harness.state import Budget, Scope, Trace
+from harness.tools import Registry, Tool
 
 
 @dataclass
@@ -112,6 +120,13 @@ def _check_expected(trace: Trace, expected: dict[str, Any], home: Path) -> list[
     if "policy_blocks" in expected:
         if n_blocked != expected["policy_blocks"]:
             failures.append(f"policy_blocks: expected={expected['policy_blocks']}, got={n_blocked}")
+    failures += _check_files(expected, home)
+    return failures
+
+
+def _check_files(expected: dict[str, Any], home: Path) -> list[str]:
+    """files_created / files_contain 검증 (runtime·call 케이스 공용)."""
+    failures: list[str] = []
     if "files_created" in expected:
         for glob_pat in expected["files_created"]:
             if not list(home.glob(glob_pat)):
@@ -134,14 +149,81 @@ def _check_expected(trace: Trace, expected: dict[str, Any], home: Path) -> list[
             for needle in needles:
                 if needle not in content:
                     failures.append(f"files_contain[{relpath}] missing: {needle!r}")
+    return failures
 
+
+def _resolve(target: str) -> Any:
+    """'module.path:attr' → 실제 객체. call 케이스의 target / register_tools용."""
+    if ":" not in target:
+        raise ValueError(f"target must be 'module:attr', got {target!r}")
+    mod_name, attr = target.split(":", 1)
+    mod = importlib.import_module(mod_name)
+    obj = mod
+    for part in attr.split("."):
+        obj = getattr(obj, part)
+    return obj
+
+
+def _sub_home(value: Any, home: Path) -> Any:
+    """kwargs 값의 '$home' 토큰을 임시 home Path로 치환 (재귀)."""
+    if isinstance(value, str):
+        if value == "$home":
+            return home
+        if value.startswith("$home/"):
+            return home / value[len("$home/") :]
+        return value
+    if isinstance(value, dict):
+        return {k: _sub_home(v, home) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_sub_home(v, home) for v in value]
+    return value
+
+
+def _build_registry(register_tools: list[str]) -> Registry:
+    """default registry + 추가 tool(module:attr)을 등록한 격리 registry.
+
+    code-to-skill: 아직 all_skills()에 없는 skill의 tool을 검증할 때 사용.
+    """
+    from harness.tools import build_default_registry
+
+    reg = build_default_registry()
+    for spec in register_tools:
+        tool = _resolve(spec)
+        if not isinstance(tool, Tool):
+            raise TypeError(f"register_tools 항목은 Tool이어야 함: {spec}")
+        reg.register(tool)
+    return reg
+
+
+def _check_returns(result: Any, expected: dict[str, Any]) -> list[str]:
+    """call 케이스 반환값 단언: returns_equals / returns_contains / returns_truthy."""
+    failures: list[str] = []
+    if "returns_equals" in expected:
+        if result != expected["returns_equals"]:
+            failures.append(
+                f"returns_equals: expected={expected['returns_equals']!r}, got={result!r}"
+            )
+    if "returns_contains" in expected:
+        sub = expected["returns_contains"]
+        if not isinstance(result, dict):
+            failures.append(f"returns_contains: result is not a dict ({type(result).__name__})")
+        else:
+            for k, v in sub.items():
+                if result.get(k) != v:
+                    failures.append(f"returns_contains[{k}]: expected={v!r}, got={result.get(k)!r}")
+    if "returns_truthy" in expected:
+        if bool(result) != bool(expected["returns_truthy"]):
+            failures.append(
+                f"returns_truthy: expected {expected['returns_truthy']}, got {result!r}"
+            )
     return failures
 
 
 def run_case(yaml_path: Path) -> EvalResult:
-    """단일 골든 케이스를 실행."""
+    """단일 골든 케이스를 실행. kind=runtime(기본) 또는 call."""
     case = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
     case_id = case.get("id", yaml_path.stem)
+    kind = case.get("kind", "runtime")
     fixtures = case.get("fixtures", {})
     inputs = case.get("inputs", {})
     expected = case.get("expected", {})
@@ -151,6 +233,10 @@ def run_case(yaml_path: Path) -> EvalResult:
         home = Path(tmp)
         _setup_fixtures(home, fixtures)
 
+        if kind == "call":
+            return _run_call_case(case_id, case, inputs, expected, home, t0)
+
+        # kind == "runtime"
         responses = [_build_response(r) for r in inputs.get("llm_responses", [])]
         mock = MockLLM(responses)
 
@@ -160,12 +246,17 @@ def run_case(yaml_path: Path) -> EvalResult:
             max_seconds=inputs.get("budget_seconds", 30.0),
         )
 
+        # F20 — 미등록 skill의 tool을 격리 registry에 주입해 검증 (code-to-skill).
+        register_tools = fixtures.get("register_tools")
+        registry = _build_registry(register_tools) if register_tools else None
+
         try:
             trace = run(
                 inputs.get("task", ""),
                 edith_home=home,
                 scope=cast(Scope, inputs.get("scope", "personal")),
                 budget=budget,
+                registry=registry,
                 llm=mock,
             )
         except Exception as e:
@@ -184,6 +275,51 @@ def run_case(yaml_path: Path) -> EvalResult:
             duration_ms=(time.time() - t0) * 1000,
             cost_tokens=trace.cost_tokens,
         )
+
+
+def _run_call_case(
+    case_id: str,
+    case: dict[str, Any],
+    inputs: dict[str, Any],
+    expected: dict[str, Any],
+    home: Path,
+    t0: float,
+) -> EvalResult:
+    """kind=call — 함수(module:attr)를 직접 호출, 반환값/예외/파일 단언.
+
+    inputs.target: 'module:attr', inputs.kwargs: 호출 kwargs ('$home' 토큰 치환).
+    expected.raises: 예외 클래스명 substring. expected.returns_*: 반환값 단언.
+    """
+    target = case.get("target") or inputs.get("target")
+    if not target:
+        return EvalResult(case_id, False, ["call 케이스에 target('module:attr') 필요"],
+                          (time.time() - t0) * 1000)
+
+    kwargs = _sub_home(inputs.get("kwargs", {}), home)
+    try:
+        fn = _resolve(target)
+    except Exception as e:
+        return EvalResult(case_id, False, [f"target resolve 실패: {e}"],
+                          (time.time() - t0) * 1000)
+
+    failures: list[str] = []
+    result: Any = None
+    try:
+        result = fn(**kwargs)
+    except Exception as e:
+        want = expected.get("raises")
+        if want and want in type(e).__name__:
+            # 예상된 예외 — 파일 단언만 추가 검사
+            failures += _check_files(expected, home)
+            return EvalResult(case_id, not failures, failures, (time.time() - t0) * 1000)
+        return EvalResult(case_id, False, [f"call raised {type(e).__name__}: {e}"],
+                          (time.time() - t0) * 1000)
+
+    if expected.get("raises"):
+        failures.append(f"expected raises {expected['raises']!r} but call returned {result!r}")
+    failures += _check_returns(result, expected)
+    failures += _check_files(expected, home)
+    return EvalResult(case_id, not failures, failures, (time.time() - t0) * 1000)
 
 
 def run_all(golden_dir: Path, pattern: str = "*.yaml") -> EvalSummary:

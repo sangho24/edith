@@ -245,6 +245,7 @@ def make_app(
                     "preview": r.preview,
                     "risk_score": r.risk_score,
                     "reversible": r.reversible,
+                    "scope": r.scope,
                     "requested_at": r.requested_at,
                     "expires_at": r.expires_at,
                 }
