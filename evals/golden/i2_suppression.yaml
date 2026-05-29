@@ -1,0 +1,31 @@
+# Phase 5.2 F26 — suppression Gate. 최근 reject 된 signal_key는 후보에서 제외.
+id: i2_suppression
+kind: call
+phase: 5
+component: F26
+description: |
+  urgent 메일 1건이 있으나, 같은 signal_key(urgent_mail::<subject>)가 어제 reject 됨.
+  7일 suppression 윈도우 안이므로 후보는 1이지만 suppressed_n=1, pushed=0.
+  suggestion_feedback.jsonl을 fixture로 미리 깔아 reject 이력을 주입.
+target: harness.initiative:run_checkin
+fixtures:
+  raw_files:
+    "raw/mail/messages.json": |
+      [
+        {"id": "u0", "sender": "boss@x.com", "subject": "긴급: 계약서 검토",
+         "snippet": "", "received_at": "2026-05-27T07:00:00+00:00",
+         "labels": [], "unread": true}
+      ]
+    "harness/suggestion_feedback.jsonl": |
+      {"signal_key": "urgent_mail::긴급: 계약서 검토", "status": "rejected", "at": "2026-05-26T08:00:00+00:00"}
+inputs:
+  kwargs:
+    edith_home: "$home"
+    slot: "morning"
+    now_iso: "2026-05-27T08:00:00+00:00"
+expected:
+  returns_contains:
+    slot: "morning"
+    candidates_n: 1
+    suppressed_n: 1
+    pushed: []

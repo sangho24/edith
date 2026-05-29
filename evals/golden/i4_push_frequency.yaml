@@ -1,0 +1,35 @@
+# Phase 5.2 F26 — PushGate. 그날 push_ledger가 이미 cap 도달 → pushed 0.
+id: i4_push_frequency
+kind: call
+phase: 5
+component: F26
+description: |
+  urgent 메일 2건이 후보지만, suggestions.json의 push_ledger가 오늘(2026-05-27)
+  이미 weekday cap(4)을 채운 상태. PushGate가 remaining=0으로 판단해 푸시 0.
+  candidates_n=2는 유지(후보 생성 자체는 됨), pushed만 비어야 한다.
+target: harness.initiative:run_checkin
+fixtures:
+  raw_files:
+    "raw/mail/messages.json": |
+      [
+        {"id": "u0", "sender": "boss@x.com", "subject": "긴급: A",
+         "snippet": "", "received_at": "2026-05-27T07:00:00+00:00",
+         "labels": [], "unread": true},
+        {"id": "u1", "sender": "boss@x.com", "subject": "긴급: B",
+         "snippet": "", "received_at": "2026-05-27T07:05:00+00:00",
+         "labels": [], "unread": true}
+      ]
+    "harness/suggestions.json": |
+      {"push_ledger": {"2026-05-27": 4}, "last": []}
+inputs:
+  kwargs:
+    edith_home: "$home"
+    slot: "morning"
+    now_iso: "2026-05-27T08:00:00+00:00"
+    weekday_cap: 4
+expected:
+  returns_contains:
+    slot: "morning"
+    candidates_n: 2
+    suppressed_n: 0
+    pushed: []

@@ -18,6 +18,11 @@ harness/daily.log
 # Phase 3 F5 — approval queue (machine-local state)
 harness/approvals.json
 
+# Phase 5.2 — proactive/trigger machine-local state
+harness/suggestions.json
+harness/suggestion_feedback.jsonl
+harness/trigger_state.json
+
 # Phase 3 F11/F12 — docker .env (machine-local)
 docker/.env
 vps/.env

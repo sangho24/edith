@@ -1,0 +1,23 @@
+# Phase 5.2 F26 — 선제적 주도 엔진 v1. run_checkin 기본: 빈 신호 → pushed 0.
+id: i1_checkin_basic
+kind: call
+phase: 5
+component: F26
+description: |
+  메일/일정/digest 신호가 전혀 없는 홈에서 morning 체크인을 부르면
+  후보가 0이고 푸시도 0이다. run_checkin이 빈 환경에서 깨지지 않음을 확인.
+target: harness.initiative:run_checkin
+fixtures:
+  raw_files:
+    "raw/mail/messages.json": "[]"
+inputs:
+  kwargs:
+    edith_home: "$home"
+    slot: "morning"
+    now_iso: "2026-05-27T08:00:00+00:00"
+expected:
+  returns_contains:
+    slot: "morning"
+    candidates_n: 0
+    suppressed_n: 0
+    pushed: []

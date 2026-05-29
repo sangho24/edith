@@ -1,0 +1,34 @@
+# Phase 5.2 F29a — recommend_mcp tool via runtime.
+id: mcp_recommend_youtube
+phase: 5
+component: F29
+description: |
+  "이 유튜브 강연 자막 정리해줘" task → LLM이 recommend_mcp tool 호출 →
+  추천 dict 반환(youtube 1위, reason에 docs/07 R2 근거) → end_turn.
+  recommend_mcp는 mcp skill로 default registry에 등록됨. read-only — 실제 MCP 호출 없음.
+
+fixtures:
+  identity: "# Edith\n한국어 존댓말. 짧게.\n"
+  schema: "# Schema\nKnowledge Twin.\n"
+
+inputs:
+  task: "이 유튜브 강연 자막 정리하고 싶은데 어떤 MCP 붙이면 좋아?"
+  scope: personal
+  budget_steps: 4
+  llm_responses:
+    - stop_reason: tool_use
+      content_blocks:
+        - type: tool_use
+          id: tu_1
+          name: recommend_mcp
+          input:
+            query: "이 유튜브 강연 자막 정리"
+    - stop_reason: end_turn
+      text: "YouTube Data MCP 연결을 추천드립니다 — read-only 무인증 (docs/07 R2)."
+
+expected:
+  finalize_reason: end_turn
+  n_steps: 2
+  tool_calls_made: 1
+  policy_blocks: 0
+  output_contains: ["YouTube", "docs/07 R2"]

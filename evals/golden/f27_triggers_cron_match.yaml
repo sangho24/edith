@@ -1,0 +1,20 @@
+# F27 — 컨텍스트 트리거: cron tick-window 매칭.
+# 금요일 08:00 KST → 평일 morning_brief 발화. datetime은 YAML로 못 넘기므로
+# evaluate_iso(now_iso=...)로 ISO 문자열을 주입한다.
+id: f27_triggers_cron_match
+kind: call
+phase: 5
+component: F27
+description: |
+  평일(금) 08:00에 morning_brief 트리거가 tick-window 안에서 발화한다.
+  state.fired 비어있어 de-dup 미발동.
+target: harness.triggers.evaluator:evaluate_iso
+inputs:
+  kwargs:
+    now_iso: "2026-05-29T08:00:00"
+    state:
+      fired: []
+    tick_seconds: 600
+expected:
+  returns_contains:
+    n: 1

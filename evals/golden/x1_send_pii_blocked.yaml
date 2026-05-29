@@ -1,0 +1,17 @@
+# Phase 5.2 F24 — R5 발신측 PII 게이트 (PRD docs/08 §4.8).
+# kind:call — guard_outbound를 직접 호출해 PII 텍스트가 ok=False로 차단됨을 단언.
+id: x1_send_pii_blocked
+kind: call
+phase: 5
+component: F24
+description: |
+  Channel.send 직전 단일 PII chokepoint인 policies.guard_outbound가 PII(이메일) 포함
+  텍스트에 대해 {"ok": False, ...}를 반환하는지 검증. send 경로는 이 결과가 False면
+  RuntimeError로 전송을 차단한다(tests/test_pii_gate.py에서 abort 검증).
+target: harness.policies:guard_outbound
+inputs:
+  kwargs:
+    text: "연락처는 sam9787@naver.com, 전화 010-1234-5678 입니다"
+expected:
+  returns_contains:
+    ok: false

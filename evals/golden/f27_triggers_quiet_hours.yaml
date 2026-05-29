@@ -1,0 +1,27 @@
+# F27 — 컨텍스트 트리거: quiet_hours 안이면 발화 skip.
+# 23:00 발화 룰이 야간 무음(22~07) 구간에 걸려 발화하지 않는다.
+# rules는 dict 목록으로 주입 → evaluate_iso가 TriggerRule로 coerce.
+id: f27_triggers_quiet_hours
+kind: call
+phase: 5
+component: F27
+description: |
+  매일 23:00 night_ping 룰이 quiet_hours (22,7) 안 → skip → n=0.
+target: harness.triggers.evaluator:evaluate_iso
+inputs:
+  kwargs:
+    now_iso: "2026-05-29T23:00:00"
+    state:
+      fired: []
+    rules:
+      - name: night_ping
+        kind: cron
+        schedule: "0 23 * * *"
+        action: ping
+        channel: telegram
+        scope: personal
+        quiet_hours: [22, 7]
+    tick_seconds: 600
+expected:
+  returns_contains:
+    n: 0

@@ -13,7 +13,20 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from harness import policies
 from harness.integrations.telegram import TelegramClient
+
+
+def _assert_outbound_clean(text: str) -> None:
+    """R5 (F24, PRD docs/08 §4.8). 모든 send 직전 단일 PII chokepoint.
+
+    `policies.guard_outbound`를 호출해 외부로 나가는 텍스트에 PII가 있으면
+    전송을 abort한다. 정상(PII 없는) 텍스트엔 영향이 없다 — 기존 send 동작 보존.
+    MockChannel·TelegramChannel 두 구현이 공유해 중복을 막는다.
+    """
+    result = policies.guard_outbound(text)
+    if not result["ok"]:
+        raise RuntimeError(f"R5: PII in outbound — {result['reason']}")
 
 
 @dataclass(frozen=True)
@@ -75,6 +88,7 @@ class MockChannel:
         )
 
     def send(self, recipient: str, text: str) -> dict[str, Any]:
+        _assert_outbound_clean(text)  # R5 PII 게이트
         self.sent.append((recipient, text))
         return {"ok": True, "recipient": recipient}
 
@@ -104,6 +118,7 @@ class TelegramChannel:
         )
 
     def send(self, recipient: str, text: str) -> dict[str, Any]:
+        _assert_outbound_clean(text)  # R5 PII 게이트
         return self._client.send_message(chat_id=int(recipient), text=text)
 
 

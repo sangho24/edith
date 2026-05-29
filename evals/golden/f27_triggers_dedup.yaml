@@ -1,0 +1,19 @@
+# F27 — 컨텍스트 트리거: de-dup. 같은 slot이 state.fired에 있으면 재발화 금지.
+id: f27_triggers_dedup
+kind: call
+phase: 5
+component: F27
+description: |
+  금 08:00이지만 '2026-05-29_morning_brief' slot이 이미 state.fired에 있어
+  morning_brief 재발화하지 않는다 → n=0.
+target: harness.triggers.evaluator:evaluate_iso
+inputs:
+  kwargs:
+    now_iso: "2026-05-29T08:00:00"
+    state:
+      fired:
+        - "2026-05-29_morning_brief"
+    tick_seconds: 600
+expected:
+  returns_contains:
+    n: 0

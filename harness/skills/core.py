@@ -30,5 +30,15 @@ SKILL = Skill(
         "evals/golden/a2_wiki_scope_block.yaml",
         "evals/golden/f20_call_demo.yaml",
         "evals/golden/f20_call_raises.yaml",
+        # Phase 5.2 — 스케줄러가 부르는(tool 아닌) 기능들의 골든 + 횡단 안전
+        "evals/golden/i1_checkin_basic.yaml",
+        "evals/golden/i2_suppression.yaml",
+        "evals/golden/i3_anti_atrophy.yaml",
+        "evals/golden/i4_push_frequency.yaml",
+        "evals/golden/f27_triggers_cron_match.yaml",
+        "evals/golden/f27_triggers_dedup.yaml",
+        "evals/golden/f27_triggers_quiet_hours.yaml",
+        "evals/golden/f27_triggers_toggle.yaml",
+        "evals/golden/x1_send_pii_blocked.yaml",
     ],
 )

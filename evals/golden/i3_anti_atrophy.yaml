@@ -1,0 +1,40 @@
+# Phase 5.2 F26 — anti-atrophy Gate. 비보호 카테고리(urgent_mail)는 action_hint 유지.
+id: i3_anti_atrophy
+kind: call
+phase: 5
+component: F26
+description: |
+  anti-atrophy Gate는 보호셋(daily_note/creative_body/...) 카테고리의 action_hint만 제거한다.
+  v1 generator가 내는 urgent_mail은 비보호 → run_checkin 통과 후에도 action_hint='답장 초안 작성'이
+  그대로 남아야 한다(대행 허용). 보호셋 로직이 비보호 후보를 잘못 죽이지 않음을 확인.
+target: harness.initiative:run_checkin
+fixtures:
+  raw_files:
+    "raw/mail/messages.json": |
+      [
+        {"id": "u0", "sender": "boss@x.com", "subject": "긴급: 계약서 검토",
+         "snippet": "", "received_at": "2026-05-27T07:00:00+00:00",
+         "labels": [], "unread": true}
+      ]
+inputs:
+  kwargs:
+    edith_home: "$home"
+    slot: "morning"
+    now_iso: "2026-05-27T08:00:00+00:00"
+expected:
+  returns_contains:
+    slot: "morning"
+    candidates_n: 1
+    suppressed_n: 0
+    pushed:
+      - id: "2026-05-27:morning:urgent_mail:0"
+        category: "urgent_mail"
+        scope: "personal"
+        title: "긴급 메일 미답: 긴급: 계약서 검토"
+        why: "오늘 unread 중 urgent 분류 메일 '긴급: 계약서 검토'에 아직 응답 없음"
+        signal_key: "urgent_mail::긴급: 계약서 검토"
+        score: 10.0
+        action_hint: "답장 초안 작성"
+        created_at: "2026-05-27T08:00:00+00:00"
+        slot: "morning"
+        status: "shown"

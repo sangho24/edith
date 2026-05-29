@@ -99,3 +99,20 @@ def check_external_payload(text: str) -> tuple[bool, str | None]:
         details = ", ".join(f"{k}×{v}" for k, v in counts.items())
         return False, f"R4: PII detected in payload ({details})"
     return True, None
+
+
+def guard_outbound(text: str) -> dict[str, Any]:
+    """R5 (F24, PRD docs/08 §4.8). 발신측 PII 게이트 — `Channel.send` 직전 chokepoint.
+
+    R4 `check_external_payload`를 send-side 의미로 래핑한 이름 명확화 진입점이다.
+    외부로 나가는 텍스트(Telegram·Mock 등 모든 채널 send)는 이 게이트를 통과해야 한다.
+    PII(이메일/전화/주민번호/API key) 발견 시 ok=False로 전송 차단.
+
+    기존 `check_external_payload` 시그니처는 하위호환 위해 그대로 두고, golden
+    kind:call의 `returns_contains` 단언이 깔끔하도록 dict를 반환한다.
+
+    Returns:
+        {"ok": bool, "reason": str | None} — ok=False면 reason에 탐지 내역.
+    """
+    allowed, reason = check_external_payload(text)
+    return {"ok": allowed, "reason": reason}

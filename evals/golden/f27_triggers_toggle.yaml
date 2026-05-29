@@ -1,0 +1,29 @@
+# F27 — 컨텍스트 트리거: toggle_key가 toggles에서 True면 skip.
+# deep_work=True면 morning_brief 발화하지 않는다.
+id: f27_triggers_toggle
+kind: call
+phase: 5
+component: F27
+description: |
+  금 08:00이지만 deep_work 토글이 켜져 있어 morning_brief skip → n=0.
+  rules dict 목록으로 toggle_key=deep_work 룰을 주입.
+target: harness.triggers.evaluator:evaluate_iso
+inputs:
+  kwargs:
+    now_iso: "2026-05-29T08:00:00"
+    state:
+      fired: []
+    rules:
+      - name: morning_brief
+        kind: cron
+        schedule: "0 8 * * 1-5"
+        action: compose_brief
+        channel: telegram
+        scope: personal
+        toggle_key: deep_work
+    toggles:
+      deep_work: true
+    tick_seconds: 600
+expected:
+  returns_contains:
+    n: 0
