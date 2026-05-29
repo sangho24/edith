@@ -125,6 +125,13 @@
 - **해결 방향**: Phase B 토론. R1(KakaoMemoChannel) 부착 PR 전에 결정 필요.
 - **의존**: docs/07 R1-R4 부착 PR 전부 이 결정에 막힘.
 
+### F3. 🔴 F18 MCP bridge — 실 client 연결 미검증 (spike 진행 중)
+
+- **발견 맥락**: PR 36. `harness/mcp/bridge.py`에 `McpToolSpec`+`make_mcp_tool`(호출 추상화)는 구현·mock 검증됨. 단 standalone Python runtime엔 MCP client가 없음 — PlayMCP는 claude.ai 세션 안에서만 노출.
+- **왜 문제인가**: `mcp_call_fn`을 주입하면 동작하지만, 그 함수를 실제로 제공할 MCP client(stdio/SSE)가 Edith 본체에 없다. F29(mcp v1)의 전제.
+- **해결 방향**: (1) Edith 본체에 MCP client 라이브러리 통합(자체 stdio 연결), 또는 (2) claude.ai 세션을 경유하는 프록시. youtube_transcript 1개로 end-to-end 실호출 1회 — 사용자가 MCP-connected 환경에서 검증.
+- **현재 안전장치**: external-write MCP tool은 `make_mcp_tool`이 생성 거부(R2 우회 방지). 동적 tool의 `EXTERNAL_WRITE_TOOLS`/`tool_scopes` 등록은 F23.
+
 ### F2. 🟢 docs/07 R1-R4 외부 스킬 미부착
 
 - **발견 맥락**: docs/07 ROI 분석. R1 KakaoMemoChannel · R2 youtube skill · R3 naver skill · R4 hwp.
