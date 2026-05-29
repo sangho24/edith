@@ -488,12 +488,16 @@ Phase 4부터 feature를 **빌드 하네스**로 짓는다 — `docs/05_cc_harne
 | F28 | 워크플로우 제안 (`propose_workflow`·Proposal·GUI 탭·partial accept) | ✅ |
 | F29a | MCP 추천기 (`recommend_mcp`, pull-only) | ✅ |
 | F19 | 스케줄러 wiring (`run_tick`·`harness tick`·docker cron */10) | ✅ |
+| F26.1 | 다중 신호 선제 엔진 (일정 충돌·ds-digest·수면·읽기목록) + 순수 generator·`candidate_summary` | ✅ |
+| F26.2 | 체감 데모 하니스 (`harness seed-demo`/`demo`·`preview_checkin`·`make serve-demo`) + eval hermetic | ✅ |
 | F30~F35 | code-to-skill·pattern auto·memory 집계·MCP OAuth | 후속 |
 
 **연결된 비전 루프**: 트리거(시간)→선제 체크인(먼저 묻기, F26)→제안(F28)→승인→
-실행(F17 executor)→MCP 추천(F29a). 미완: 실 MCP 연결(F3), code-to-skill(F30),
-반복 패턴 자동화(F31), 메모리 학습 집계(F33). 스케줄러 실구동은 사용자 머신
-(docker edith-cron / launchd) 필요.
+실행(F17 executor)→MCP 추천(F29a). 선제 체크인은 이제 5개 신호(긴급 메일·일정 충돌·
+ds-digest 미정리·수면 부족·읽기목록 방치)를 본다(F26.1). `harness demo`로 노트북에서
+시드→brief→선제 제안 미리보기를 한 화면에 체감(F26.2). 미완: 실 MCP 연결(F3),
+code-to-skill(F30), 반복 패턴 자동화(F31), 메모리 학습 집계(F33). 스케줄러 실구동은
+사용자 머신(docker edith-cron / launchd) 필요.
 
 ---
 

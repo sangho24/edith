@@ -17,7 +17,13 @@ from harness.initiative import (
     PushGate,
     Suggestion,
     SuggestionGenerator,
+    calendar_conflict_suggestions,
+    candidate_summary,
+    digest_suggestions,
+    health_suggestions,
     is_atrophy_protected,
+    preview_checkin,
+    reading_suggestions,
     record_feedback,
     run_checkin,
 )
@@ -235,3 +241,140 @@ def test_run_checkin_old_rejection_not_suppressed(edith_home: Path) -> None:
     out = run_checkin(edith_home, "morning", now_iso=WEEKDAY_ISO)
     assert out["suppressed_n"] == 0
     assert len(out["pushed"]) == 1
+
+
+# ── 다중 신호 generator (순수 함수, 결정적) ──
+
+_NOW = "2026-05-29T08:00:00+09:00"
+
+
+def _ev(summary: str, h1: int, m1: int, h2: int, m2: int) -> dict:
+    return {
+        "summary": summary,
+        "start": f"2026-05-29T{h1:02d}:{m1:02d}:00+09:00",
+        "end": f"2026-05-29T{h2:02d}:{m2:02d}:00+09:00",
+    }
+
+
+def test_calendar_conflict_detects_overlap() -> None:
+    today = {"events": [_ev("A", 10, 0, 11, 0), _ev("B", 10, 30, 11, 30), _ev("C", 14, 0, 15, 0)]}
+    out = calendar_conflict_suggestions(today, "morning", _NOW)
+    assert len(out) == 1
+    assert out[0].category == "calendar_conflict"
+    assert "A" in out[0].title and "B" in out[0].title
+    assert out[0].action_hint  # 조정은 대행 가능
+
+
+def test_calendar_no_conflict_when_back_to_back() -> None:
+    # 11:00에 끝나고 11:00에 시작 → 겹치지 않음(경계 비포함).
+    today = {"events": [_ev("A", 10, 0, 11, 0), _ev("B", 11, 0, 12, 0)]}
+    assert calendar_conflict_suggestions(today, "morning", _NOW) == []
+
+
+def test_calendar_conflict_ignores_malformed() -> None:
+    today = {"events": [{"summary": "no-times"}, _ev("A", 10, 0, 11, 0)]}
+    assert calendar_conflict_suggestions(today, "morning", _NOW) == []
+
+
+def test_digest_suggestion_when_new() -> None:
+    digest = {"date": "2026-05-29", "n": 2, "items": [{"title": "X"}]}
+    out = digest_suggestions(digest, "morning", _NOW)
+    assert len(out) == 1 and out[0].category == "ds_digest"
+    assert "2건" in out[0].title
+
+
+def test_digest_none_when_empty() -> None:
+    assert digest_suggestions({"n": 0, "items": []}, "morning", _NOW) == []
+
+
+def test_health_nudge_when_short_sleep() -> None:
+    out = health_suggestions({"sleep": 300.0}, "morning", _NOW)
+    assert len(out) == 1
+    assert out[0].category == "health"
+    assert out[0].action_hint is None  # 건강은 nudge만, 대행 금지
+
+
+def test_health_none_when_enough_or_missing() -> None:
+    assert health_suggestions({"sleep": 420.0}, "morning", _NOW) == []
+    assert health_suggestions({}, "morning", _NOW) == []
+
+
+def test_reading_stale_flags_old_unread_only() -> None:
+    queue = [
+        {"title": "old", "added_at": "2026-05-04", "read": False},  # 25d → stale
+        {"title": "fresh", "added_at": "2026-05-26", "read": False},  # 3d → no
+        {"title": "done", "added_at": "2026-04-01", "read": True},  # read → ignore
+    ]
+    out = reading_suggestions(queue, "morning", _NOW)
+    assert len(out) == 1
+    assert out[0].category == "reading_stale"
+    assert "1건" in out[0].title
+
+
+def test_candidate_summary_multi_signal() -> None:
+    signals = {
+        "mail_summary": {"urgent": ["긴급: A"]},
+        "today": {"events": [_ev("A", 10, 0, 11, 0), _ev("B", 10, 30, 11, 30)]},
+        "digest": {"date": "2026-05-29", "n": 2, "items": [{"title": "X"}]},
+        "health": {"sleep": 300.0},
+        "reading": [{"title": "old", "added_at": "2026-05-04", "read": False}],
+    }
+    summary = candidate_summary(signals, "morning", _NOW)
+    assert summary["n"] == 5
+    assert summary["categories"] == [
+        "calendar_conflict",
+        "ds_digest",
+        "health",
+        "reading_stale",
+        "urgent_mail",
+    ]
+
+
+# ── generate / preview 통합 ──
+
+
+def test_generate_includes_digest_and_reading(edith_home: Path) -> None:
+    (edith_home / "raw" / "digest" / "latest.json").write_text(
+        json.dumps({"date": "2026-05-27", "items": [{"title": "X"}, {"title": "Y"}]}),
+        encoding="utf-8",
+    )
+    (edith_home / "raw" / "reading").mkdir(parents=True, exist_ok=True)
+    (edith_home / "raw" / "reading" / "queue.json").write_text(
+        json.dumps([{"title": "old", "added_at": "2026-05-01", "read": False}]),
+        encoding="utf-8",
+    )
+    cands = SuggestionGenerator().generate(edith_home, "morning", WEEKDAY_ISO)
+    cats = {c.category for c in cands}
+    assert "ds_digest" in cats
+    assert "reading_stale" in cats
+
+
+def test_run_checkin_surfaces_calendar_conflict(edith_home: Path) -> None:
+    # now_iso(2026-05-27 UTC) 창 안에 들어오도록 그 날짜로 일정 시드.
+    day = WEEKDAY_ISO[:10]
+    events = [
+        {
+            "id": "a", "title": "A", "attendees": [],
+            "start": f"{day}T10:00:00+09:00", "end": f"{day}T11:00:00+09:00",
+        },
+        {
+            "id": "b", "title": "B", "attendees": [],
+            "start": f"{day}T10:30:00+09:00", "end": f"{day}T11:30:00+09:00",
+        },
+    ]
+    (edith_home / "raw" / "calendar" / "events.json").write_text(
+        json.dumps(events, ensure_ascii=False), encoding="utf-8"
+    )
+    out = run_checkin(edith_home, "morning", now_iso=WEEKDAY_ISO)
+    cats = {p["category"] for p in out["pushed"]}
+    assert "calendar_conflict" in cats
+
+
+def test_preview_checkin_does_not_mutate_state(edith_home: Path) -> None:
+    _setup_urgent_mail(edith_home, ["긴급: A"])
+    pv1 = preview_checkin(edith_home, "morning", now_iso=WEEKDAY_ISO)
+    pv2 = preview_checkin(edith_home, "morning", now_iso=WEEKDAY_ISO)
+    assert pv1["candidates_n"] == pv2["candidates_n"] == 1
+    assert pv1["would_push"] == pv2["would_push"]  # 반복해도 동일(ledger 미소모)
+    # 미저장 — suggestions.json 생성 안 됨
+    assert not (edith_home / "harness" / "suggestions.json").exists()

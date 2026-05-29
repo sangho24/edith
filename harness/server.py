@@ -127,10 +127,15 @@ _WEBUI_INDEX = Path(__file__).resolve().parent / "webui" / "index.html"
 
 
 def _brief_text(home: Path) -> str:
-    """morning brief 텍스트 — Web GUI와 Telegram /brief 명령이 공유."""
+    """morning brief 텍스트 — Web GUI와 Telegram /brief 명령이 공유.
+
+    now를 Edith 시간대(KST)로 넘겨 일정·헬스의 '오늘' 창을 사용자 날짜로 고정한다
+    (서버가 UTC로 돌아도 KST 자정 부근에 그날 데이터가 누락되지 않게).
+    """
+    from harness.localtime import edith_now
     from harness.morning import compose_brief
 
-    return compose_brief(home).render_text()
+    return compose_brief(home, now=edith_now()).render_text()
 
 
 def _verify_signature(body: bytes, signature: str | None, secret: str) -> bool:

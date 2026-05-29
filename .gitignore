@@ -26,6 +26,13 @@ harness/trigger_state.json
 # Phase 5.2 F28 — proposal store (machine-local)
 harness/proposals.json
 
+# 체감 데모 시드 (합성 데이터 — 커밋 안 함; 실데이터도 같은 위치라 보호 차원)
+raw/mail/messages.json
+raw/calendar/events.json
+raw/digest/latest.json
+raw/health/export.xml
+raw/reading/queue.json
+
 # Phase 3 F11/F12 — docker .env (machine-local)
 docker/.env
 vps/.env

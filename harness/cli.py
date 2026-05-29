@@ -233,10 +233,11 @@ def mail(fixture: str | None, limit: int) -> None:
 @main.command()
 def brief() -> None:
     """Morning Briefing (Phase 3 F4) — 오늘 일정 + 메일 + ds-digest + Top 3."""
+    from harness.localtime import edith_now
     from harness.morning import compose_brief
 
     home = _edith_home()
-    b = compose_brief(home)
+    b = compose_brief(home, now=edith_now())
     click.echo(b.render_text())
 
 
@@ -422,6 +423,91 @@ def tick(now: str | None, tick_seconds: int) -> None:
         click.echo(f"push → {text}")
     if not result["fired"]:
         click.echo("(no trigger fired this tick)")
+
+
+@main.command("seed-demo")
+@click.option("--force", is_flag=True, help="기존 파일도 덮어쓰기")
+@click.option("--date", "date_str", default=None, help="시드 기준일 YYYY-MM-DD (기본 오늘 KST)")
+def seed_demo_cmd(force: bool, date_str: str | None) -> None:
+    """체감 데모용 raw/ 샘플 시드 (mail·calendar·digest·health·reading)."""
+    from datetime import date as _date
+
+    from harness.seed_demo import seed_demo
+
+    home = _edith_home()
+    target = _date.fromisoformat(date_str) if date_str else None
+    result = seed_demo(home, target_date=target, force=force)
+    click.echo(f"seed date: {result['date']}")
+    for r in result["written"]:
+        click.echo(f"  + {r}")
+    for r in result["skipped"]:
+        click.echo(f"  · skip (이미 있음): {r}")
+    if result["skipped"] and not force:
+        click.echo("  (덮어쓰려면 --force)")
+    click.echo("\n다음:")
+    click.echo("  harness demo       # CLI 한 화면 시연 (brief + 선제 제안)")
+    click.echo("  make serve-demo    # GUI 확인 → http://127.0.0.1:8765")
+
+
+@main.command()
+@click.option("--now", "now_iso_opt", default=None, help="기준 시각 ISO (기본 오늘 08:00 KST)")
+@click.option("--no-seed", is_flag=True, help="시드 생략 (이미 깔려 있을 때)")
+def demo(now_iso_opt: str | None, no_seed: bool) -> None:
+    """체감 데모 — 시드 → 아침 brief → 선제 체크인 미리보기를 한 화면에.
+
+    첫 실행은 raw/ 시드를 생성하고(이미 있으면 보존), 이후엔 preview_checkin이
+    push_ledger를 소모하지 않으므로 몇 번을 돌려도 동일하게 보인다.
+    """
+    from datetime import datetime, time
+
+    from harness.initiative import preview_checkin
+    from harness.morning import compose_brief
+    from harness.seed_demo import KST, seed_demo
+
+    home = _edith_home()
+    if now_iso_opt:
+        ref = datetime.fromisoformat(now_iso_opt)
+    else:
+        ref = datetime.combine(datetime.now(KST).date(), time(8, 0), tzinfo=KST)
+    now_iso = ref.isoformat()
+
+    if not no_seed:
+        res = seed_demo(home, target_date=ref.date(), force=False)
+        if res["written"]:
+            click.echo(f"✓ 시드 생성 ({res['date']}): {', '.join(res['written'])}")
+        else:
+            click.echo(f"· 시드 이미 존재 ({res['date']}) — 보존")
+
+    # 데모는 seed 일정을 읽어야 하므로 EventKit/실데이터 override env 정리 후 fixture 지정.
+    for k in (
+        "EDITH_DS_DIGEST_URL",
+        "EDITH_DS_DIGEST_LATEST",
+        "EDITH_HEALTH_EXPORT",
+        "EDITH_MAIL_FIXTURE",
+    ):
+        os.environ.pop(k, None)
+    os.environ["EDITH_CALENDAR_FIXTURE"] = str(home / "raw" / "calendar" / "events.json")
+
+    brief = compose_brief(home, now=ref)
+    click.echo("\n" + brief.render_text())
+
+    pv = preview_checkin(home, "morning", now_iso=now_iso)
+    click.echo("\n" + "─" * 50)
+    click.echo(
+        f"🔔 선제 체크인 (morning) — 후보 {pv['candidates_n']}건 · 오늘 cap {pv['cap']}건"
+    )
+    click.echo("─" * 50)
+    would = set(pv["would_push"])
+    for s in pv["ranked"]:
+        mark = "→" if s["id"] in would else "·"
+        hint = f"  [{s['action_hint']}]" if s.get("action_hint") else "  [nudge]"
+        click.echo(f" {mark} {s['title']}{hint}")
+        click.echo(f"     {s['why']}")
+    if pv["candidates_n"] == 0:
+        click.echo(" (후보 없음 — `harness seed-demo`로 시드를 먼저 깔아주세요)")
+    click.echo("")
+    click.echo("미리보기입니다 — 실제 push/budget 소비 없음. '→'가 오늘 실제 push 대상.")
+    click.echo("GUI 조작: make serve-demo → http://127.0.0.1:8765 (Brief/Proposals/Approvals)")
 
 
 @main.command()

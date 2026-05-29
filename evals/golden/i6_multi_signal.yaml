@@ -1,0 +1,40 @@
+# Phase 5.2 F26+ — 다중 신호 선제 엔진: 5개 카테고리 동시 생성.
+# 긴급 메일 + 일정 충돌 + ds-digest 미정리 + 수면 부족 + 읽기목록 방치를 한 번에 집계.
+id: i6_multi_signal
+kind: call
+phase: 5
+component: F26
+description: |
+  메일·일정·digest·헬스·읽기목록 신호가 모두 있을 때 5개 카테고리 후보가 각 1건씩 생성된다.
+  candidate_summary가 카테고리를 정렬된 목록으로 결정적으로 반환함을 검증.
+target: harness.initiative:candidate_summary
+inputs:
+  kwargs:
+    signals:
+      mail_summary:
+        urgent: ["긴급: 계약서 검토 — 오늘까지"]
+      today:
+        events:
+          - summary: "제품 로드맵 회의"
+            start: "2026-05-29T10:00:00+09:00"
+            end: "2026-05-29T11:00:00+09:00"
+          - summary: "클라이언트 콜 — Acme"
+            start: "2026-05-29T10:30:00+09:00"
+            end: "2026-05-29T11:30:00+09:00"
+      digest:
+        date: "2026-05-29"
+        n: 2
+        items:
+          - title: "Mixture-of-Experts 라우팅의 최신 동향"
+      health:
+        sleep: 300.0
+      reading:
+        - title: "Chain-of-Thought의 한계: 최신 비판 논문"
+          added_at: "2026-05-04"
+          read: false
+    slot: "morning"
+    now_iso: "2026-05-29T08:00:00+09:00"
+expected:
+  returns_contains:
+    n: 5
+    categories: ["calendar_conflict", "ds_digest", "health", "reading_stale", "urgent_mail"]

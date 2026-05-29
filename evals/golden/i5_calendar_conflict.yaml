@@ -1,0 +1,30 @@
+# Phase 5.2 F26+ — 다중 신호 선제 엔진: 일정 충돌 감지.
+# candidate_summary는 compose_brief 없이 signals만으로 카테고리를 결정적으로 집계한다.
+id: i5_calendar_conflict
+kind: call
+phase: 5
+component: F26
+description: |
+  오늘 일정 두 건(10:00-11:00, 10:30-11:30)이 시간상 겹치면 calendar_conflict 후보가
+  정확히 1건 생성된다. 14:00 일정은 겹치지 않아 후보가 늘지 않는다.
+target: harness.initiative:candidate_summary
+inputs:
+  kwargs:
+    signals:
+      today:
+        events:
+          - summary: "제품 로드맵 회의"
+            start: "2026-05-29T10:00:00+09:00"
+            end: "2026-05-29T11:00:00+09:00"
+          - summary: "클라이언트 콜 — Acme"
+            start: "2026-05-29T10:30:00+09:00"
+            end: "2026-05-29T11:30:00+09:00"
+          - summary: "1:1 멘토링"
+            start: "2026-05-29T14:00:00+09:00"
+            end: "2026-05-29T15:00:00+09:00"
+    slot: "morning"
+    now_iso: "2026-05-29T08:00:00+09:00"
+expected:
+  returns_contains:
+    n: 1
+    categories: ["calendar_conflict"]

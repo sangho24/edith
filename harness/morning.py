@@ -120,9 +120,14 @@ def _build_top3(today: dict, mail_summary: dict, digest: dict) -> list[str]:
     return top3[:3]
 
 
-def compose_brief(edith_home: Path) -> MorningBrief:
-    """오늘 brief 합성 (no LLM)."""
-    today_str = datetime.now(UTC).strftime("%Y-%m-%d (%a)")
+def compose_brief(edith_home: Path, now: datetime | None = None) -> MorningBrief:
+    """오늘 brief 합성 (no LLM).
+
+    now 주입 시 일정·헬스의 '오늘' 창을 그 시각 기준으로 잡는다(데모/체크인 결정성).
+    now=None이면 기존과 동일하게 실시간(UTC now / date.today())을 쓴다.
+    """
+    ref = now or datetime.now(UTC)
+    today_str = ref.strftime("%Y-%m-%d (%a)")
     brief = MorningBrief(today_str=today_str)
 
     # 1. 일정 — macOS 면 EventKit, 아니면 LocalCalendarSource (fixture/json)
@@ -131,7 +136,7 @@ def compose_brief(edith_home: Path) -> MorningBrief:
         edith_home=edith_home,
         fixture_path=Path(fixture_env) if fixture_env else None,
     )
-    brief.today = today_view(cal_source)
+    brief.today = today_view(cal_source, now)
 
     # 2. 메일
     mail_path = Path(
@@ -154,8 +159,14 @@ def compose_brief(edith_home: Path) -> MorningBrief:
     else:
         brief.digest = get_digest_source(edith_home).latest()
 
-    # 4. 헬스 (F15) — 오늘치 Apple Health 요약
-    today_d = date.today()
+    # 4. 헬스 (F15) — 오늘치 Apple Health 요약.
+    #    now 명시 시 '오늘'을 Edith 시간대(KST)로 통일(일정 창과 일치). None이면 기존 date.today().
+    if now is not None:
+        from harness.localtime import edith_today
+
+        today_d = edith_today(now)
+    else:
+        today_d = date.today()
     samples = get_health_source(edith_home).samples(today_d, today_d)
     brief.health = daily_summary(samples, today_d)
 

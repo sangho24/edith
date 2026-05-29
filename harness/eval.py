@@ -13,7 +13,10 @@ evals/golden/*.yaml의 케이스를 일괄 실행하고 expected vs actual 검�
 from __future__ import annotations
 
 import importlib
+import os
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -219,6 +222,36 @@ def _check_returns(result: Any, expected: dict[str, Any]) -> list[str]:
     return failures
 
 
+# 골든을 hermetic하게 — 개발 머신에 떠 있을 수 있는 실데이터 source override env를
+# 케이스 실행 동안 제거한다(예: 실제 ds-digest URL 네트워크 호출, 실 export.xml 경로).
+_HERMETIC_UNSET = (
+    "EDITH_DS_DIGEST_URL",
+    "EDITH_DS_DIGEST_LATEST",
+    "EDITH_HEALTH_EXPORT",
+    "EDITH_MAIL_FIXTURE",
+)
+
+
+@contextmanager
+def _hermetic_env(home: Path) -> Iterator[None]:
+    """케이스 실행 동안 캘린더/네트워크/실데이터 env를 격리. 종료 시 원복.
+
+    EDITH_CALENDAR_FIXTURE를 임시 home의 events.json으로 강제 → macOS에서도 EventKit
+    (실제 Apple Calendar)을 읽지 않고 fixture만 본다. 골든이 머신 상태에 의존하지 않게 한다.
+    """
+    saved: dict[str, str | None] = {k: os.environ.pop(k, None) for k in _HERMETIC_UNSET}
+    saved["EDITH_CALENDAR_FIXTURE"] = os.environ.get("EDITH_CALENDAR_FIXTURE")
+    os.environ["EDITH_CALENDAR_FIXTURE"] = str(home / "raw" / "calendar" / "events.json")
+    try:
+        yield
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
 def run_case(yaml_path: Path) -> EvalResult:
     """단일 골든 케이스를 실행. kind=runtime(기본) 또는 call."""
     case = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
@@ -233,48 +266,49 @@ def run_case(yaml_path: Path) -> EvalResult:
         home = Path(tmp)
         _setup_fixtures(home, fixtures)
 
-        if kind == "call":
-            return _run_call_case(case_id, case, inputs, expected, home, t0)
+        with _hermetic_env(home):
+            if kind == "call":
+                return _run_call_case(case_id, case, inputs, expected, home, t0)
 
-        # kind == "runtime"
-        responses = [_build_response(r) for r in inputs.get("llm_responses", [])]
-        mock = MockLLM(responses)
+            # kind == "runtime"
+            responses = [_build_response(r) for r in inputs.get("llm_responses", [])]
+            mock = MockLLM(responses)
 
-        budget = Budget(
-            max_tokens=inputs.get("budget_tokens", 8000),
-            max_steps=inputs.get("budget_steps", 20),
-            max_seconds=inputs.get("budget_seconds", 30.0),
-        )
-
-        # F20 — 미등록 skill의 tool을 격리 registry에 주입해 검증 (code-to-skill).
-        register_tools = fixtures.get("register_tools")
-        registry = _build_registry(register_tools) if register_tools else None
-
-        try:
-            trace = run(
-                inputs.get("task", ""),
-                edith_home=home,
-                scope=cast(Scope, inputs.get("scope", "personal")),
-                budget=budget,
-                registry=registry,
-                llm=mock,
+            budget = Budget(
+                max_tokens=inputs.get("budget_tokens", 8000),
+                max_steps=inputs.get("budget_steps", 20),
+                max_seconds=inputs.get("budget_seconds", 30.0),
             )
-        except Exception as e:
+
+            # F20 — 미등록 skill의 tool을 격리 registry에 주입해 검증 (code-to-skill).
+            register_tools = fixtures.get("register_tools")
+            registry = _build_registry(register_tools) if register_tools else None
+
+            try:
+                trace = run(
+                    inputs.get("task", ""),
+                    edith_home=home,
+                    scope=cast(Scope, inputs.get("scope", "personal")),
+                    budget=budget,
+                    registry=registry,
+                    llm=mock,
+                )
+            except Exception as e:
+                return EvalResult(
+                    case_id=case_id,
+                    passed=False,
+                    failures=[f"runtime exception: {type(e).__name__}: {e}"],
+                    duration_ms=(time.time() - t0) * 1000,
+                )
+
+            failures = _check_expected(trace, expected, home)
             return EvalResult(
                 case_id=case_id,
-                passed=False,
-                failures=[f"runtime exception: {type(e).__name__}: {e}"],
+                passed=not failures,
+                failures=failures,
                 duration_ms=(time.time() - t0) * 1000,
+                cost_tokens=trace.cost_tokens,
             )
-
-        failures = _check_expected(trace, expected, home)
-        return EvalResult(
-            case_id=case_id,
-            passed=not failures,
-            failures=failures,
-            duration_ms=(time.time() - t0) * 1000,
-            cost_tokens=trace.cost_tokens,
-        )
 
 
 def _run_call_case(

@@ -175,47 +175,235 @@ def record_feedback(
 
 
 # ── 후보 생성 ──
+#
+# 각 신호 카테고리는 순수 함수(signal → list[Suggestion])로 분리한다. compose_brief·
+# EventKit·실시간 now에 의존하지 않으므로 candidate_summary 골든에서 결정적으로 검증된다.
+# SuggestionGenerator는 compose_brief + 읽기목록으로 signals dict를 만들어 위임만 한다.
+
+# 카테고리별 튜닝 상수.
+CALENDAR_CONFLICT_SCORE = 9.0
+DIGEST_SCORE = 6.0
+HEALTH_SLEEP_MIN_MINUTES = 360.0  # 6h 미만이면 수면 부족 nudge
+HEALTH_SCORE = 4.0
+READING_STALE_DAYS = 14
+READING_SCORE = 3.0
+
+
+def urgent_mail_suggestions(mail_summary: dict, slot: str, now_iso: str) -> list[Suggestion]:
+    """urgent 미답 메일 → urgent_mail 후보."""
+    out: list[Suggestion] = []
+    urgent = mail_summary.get("urgent") or []
+    day = now_iso[:10]
+    for idx, subject in enumerate(urgent):
+        out.append(
+            Suggestion(
+                id=f"{day}:{slot}:urgent_mail:{idx}",
+                category="urgent_mail",
+                scope="personal",
+                title=f"긴급 메일 미답: {subject}",
+                why=f"오늘 unread 중 urgent 분류 메일 '{subject}'에 아직 응답 없음",
+                signal_key=f"urgent_mail::{subject}",
+                score=10.0 - idx,
+                action_hint="답장 초안 작성",
+                created_at=now_iso,
+                slot=slot,
+                status="proposed",
+            )
+        )
+    return out
+
+
+def _detect_conflicts(events: list[dict]) -> list[tuple[dict, dict]]:
+    """start/end가 시간상 겹치는 이벤트 쌍(시작시각 정렬 기반)."""
+    parsed: list[tuple[datetime, datetime, dict]] = []
+    for ev in events:
+        try:
+            s = datetime.fromisoformat(ev["start"])
+            e = datetime.fromisoformat(ev["end"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        parsed.append((s, e, ev))
+    parsed.sort(key=lambda x: x[0])
+    out: list[tuple[dict, dict]] = []
+    for i in range(len(parsed)):
+        _s1, e1, ev1 = parsed[i]
+        for j in range(i + 1, len(parsed)):
+            s2, _e2, ev2 = parsed[j]
+            if s2 < e1:
+                out.append((ev1, ev2))
+            else:
+                break  # 시작시각 정렬 → 이후 이벤트는 모두 e1 이후 시작
+    return out
+
+
+def _ev_label(ev: dict) -> str:
+    return ev.get("summary") or ev.get("title") or "(제목없음)"
+
+
+def calendar_conflict_suggestions(today: dict, slot: str, now_iso: str) -> list[Suggestion]:
+    """오늘 일정 중 시간이 겹치는 쌍 → calendar_conflict 후보."""
+    events = today.get("events") or []
+    out: list[Suggestion] = []
+    day = now_iso[:10]
+    for idx, (ev1, ev2) in enumerate(_detect_conflicts(events)):
+        t1, t2 = _ev_label(ev1), _ev_label(ev2)
+        out.append(
+            Suggestion(
+                id=f"{day}:{slot}:calendar_conflict:{idx}",
+                category="calendar_conflict",
+                scope="personal",
+                title=f"일정 충돌: {t1} ↔ {t2}",
+                why=f"오늘 두 일정 '{t1}'·'{t2}' 시간이 겹침 — 조정 필요",
+                signal_key=f"calendar_conflict::{t1}::{t2}",
+                score=CALENDAR_CONFLICT_SCORE - idx,
+                action_hint="겹치는 일정 조정 제안",
+                created_at=now_iso,
+                slot=slot,
+                status="proposed",
+            )
+        )
+    return out
+
+
+def digest_suggestions(digest: dict, slot: str, now_iso: str) -> list[Suggestion]:
+    """ds-digest 새 항목 → ds_digest 후보(미정리 리마인드)."""
+    n = int(digest.get("n", 0) or 0)
+    if n <= 0:
+        return []
+    items = digest.get("items") or []
+    first = str(items[0].get("title", "")) if items and isinstance(items[0], dict) else ""
+    d_date = digest.get("date") or now_iso[:10]
+    why = f"{d_date} digest {n}건 도착 — 아직 정리 안 됨"
+    if first:
+        why += f" (예: {first[:50]})"
+    return [
+        Suggestion(
+            id=f"{now_iso[:10]}:{slot}:ds_digest:0",
+            category="ds_digest",
+            scope="personal",
+            title=f"ds-digest 새 이슈 {n}건 미정리",
+            why=why,
+            signal_key=f"ds_digest::{d_date}",
+            score=DIGEST_SCORE,
+            action_hint="digest 핵심 3개 요약",
+            created_at=now_iso,
+            slot=slot,
+            status="proposed",
+        )
+    ]
+
+
+def health_suggestions(health: dict, slot: str, now_iso: str) -> list[Suggestion]:
+    """수면 부족(< HEALTH_SLEEP_MIN_MINUTES) → health nudge. 건강은 대행 금지(action_hint 없음)."""
+    sleep = health.get("sleep")
+    if not isinstance(sleep, int | float) or sleep <= 0 or sleep >= HEALTH_SLEEP_MIN_MINUTES:
+        return []
+    hours = sleep / 60.0
+    return [
+        Suggestion(
+            id=f"{now_iso[:10]}:{slot}:health:0",
+            category="health",
+            scope="personal",
+            title=f"수면 부족: 어젯밤 {hours:.1f}h",
+            why=f"수면 {int(sleep)}분 (<{int(HEALTH_SLEEP_MIN_MINUTES)}분). 컨디션 주의",
+            signal_key=f"health_sleep::{now_iso[:10]}",
+            score=HEALTH_SCORE,
+            action_hint=None,  # nudge only — 건강은 Edith가 대행할 대상 아님
+            created_at=now_iso,
+            slot=slot,
+            status="proposed",
+        )
+    ]
+
+
+def reading_suggestions(queue: list[dict], slot: str, now_iso: str) -> list[Suggestion]:
+    """읽기목록 중 READING_STALE_DAYS일+ 안 본 미읽음 항목 → reading_stale 후보."""
+    now_d = _parse_date(now_iso)
+    if now_d is None:
+        return []
+    stale: list[tuple[dict, int]] = []
+    for item in queue:
+        if not isinstance(item, dict) or item.get("read"):
+            continue
+        added = _parse_date(str(item.get("added_at", "")))
+        if added is None:
+            continue
+        age = (now_d - added).days
+        if age >= READING_STALE_DAYS:
+            stale.append((item, age))
+    if not stale:
+        return []
+    stale.sort(key=lambda x: -x[1])
+    oldest, oldest_age = stale[0]
+    title = str(oldest.get("title", "(제목없음)"))
+    return [
+        Suggestion(
+            id=f"{now_iso[:10]}:{slot}:reading_stale:0",
+            category="reading_stale",
+            scope="personal",
+            title=f"읽기목록 {len(stale)}건 {oldest_age // 7}주+ 방치",
+            why=f"'{title[:50]}' 등 {len(stale)}건이 {READING_STALE_DAYS}일+ 안 읽힘",
+            signal_key=f"reading_stale::{title}",
+            score=READING_SCORE,
+            action_hint="안 본 읽기목록 핵심 요약 제안",
+            created_at=now_iso,
+            slot=slot,
+            status="proposed",
+        )
+    ]
+
+
+def _collect_from_signals(signals: dict, slot: str, now_iso: str) -> list[Suggestion]:
+    """signals dict(mail_summary/today/digest/health/reading) → 전체 후보."""
+    out: list[Suggestion] = []
+    out += urgent_mail_suggestions(signals.get("mail_summary") or {}, slot, now_iso)
+    out += calendar_conflict_suggestions(signals.get("today") or {}, slot, now_iso)
+    out += digest_suggestions(signals.get("digest") or {}, slot, now_iso)
+    out += health_suggestions(signals.get("health") or {}, slot, now_iso)
+    out += reading_suggestions(signals.get("reading") or [], slot, now_iso)
+    return out
+
+
+def candidate_summary(signals: dict, slot: str, now_iso: str) -> dict:
+    """순수 후보 요약(골든 결정성용). compose_brief 없이 signals만으로 카테고리 집계.
+
+    Returns: {"n": 후보 수, "categories": 정렬된 카테고리 목록}.
+    """
+    cands = _collect_from_signals(signals, slot, now_iso)
+    return {"n": len(cands), "categories": sorted({c.category for c in cands})}
+
+
+def _load_reading_queue(edith_home: Path) -> list[dict]:
+    """raw/reading/queue.json 로드(없으면 []). 형식: [{title,url,added_at,read}]."""
+    path = edith_home / "raw" / "reading" / "queue.json"
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return []
+    return data if isinstance(data, list) else []
 
 
 class SuggestionGenerator:
-    """compose_brief 신호 → Suggestion 후보.
+    """compose_brief + 읽기목록 신호 → Suggestion 후보.
 
-    v1은 urgent 미답 메일만 후보화한다(mail_summary.urgent 사용).
-    카테고리/슬롯이 늘어나면 _generators에 메서드를 추가한다.
+    compose_brief가 일정·메일·digest·헬스를 모으고, 읽기목록은 raw/reading에서 읽어
+    signals dict로 합친 뒤 _collect_from_signals에 위임한다. now_iso를 compose_brief에
+    주입해 일정·헬스의 '오늘' 창을 체크인 시각과 일치시킨다.
     """
 
     def generate(self, edith_home: Path, slot: str, now_iso: str) -> list[Suggestion]:
         """슬롯에 대한 모든 후보 Suggestion 반환."""
-        brief = compose_brief(edith_home)
-        out: list[Suggestion] = []
-        out += self._from_urgent_mail(brief.mail_summary, slot, now_iso)
-        return out
-
-    def _from_urgent_mail(
-        self, mail_summary: dict, slot: str, now_iso: str
-    ) -> list[Suggestion]:
-        """urgent 미답 메일 → urgent_mail 카테고리 후보."""
-        out: list[Suggestion] = []
-        urgent = mail_summary.get("urgent") or []
-        day = now_iso[:10]
-        for idx, subject in enumerate(urgent):
-            signal_key = f"urgent_mail::{subject}"
-            out.append(
-                Suggestion(
-                    id=f"{day}:{slot}:urgent_mail:{idx}",
-                    category="urgent_mail",
-                    scope="personal",
-                    title=f"긴급 메일 미답: {subject}",
-                    why=f"오늘 unread 중 urgent 분류 메일 '{subject}'에 아직 응답 없음",
-                    signal_key=signal_key,
-                    score=10.0 - idx,
-                    action_hint="답장 초안 작성",
-                    created_at=now_iso,
-                    slot=slot,
-                    status="proposed",
-                )
-            )
-        return out
+        brief = compose_brief(edith_home, now=_parse_datetime(now_iso))
+        signals = {
+            "mail_summary": brief.mail_summary,
+            "today": brief.today,
+            "digest": brief.digest,
+            "health": brief.health,
+            "reading": _load_reading_queue(edith_home),
+        }
+        return _collect_from_signals(signals, slot, now_iso)
 
 
 # ── Gate ──
@@ -321,6 +509,16 @@ def _parse_date(iso: str) -> date | None:
             return None
 
 
+def _parse_datetime(iso: str | None) -> datetime | None:
+    """ISO 문자열 → aware/naive datetime. 실패 시 None(→ compose_brief 실시간 fallback)."""
+    if not iso:
+        return None
+    try:
+        return datetime.fromisoformat(iso)
+    except ValueError:
+        return None
+
+
 # ── 진입점 ──
 
 
@@ -386,12 +584,59 @@ def run_checkin(
     }
 
 
+def preview_checkin(
+    edith_home: Path,
+    slot: str,
+    now_iso: str | None = None,
+    weekday_cap: int = DEFAULT_WEEKDAY_CAP,
+    weekend_cap: int = DEFAULT_WEEKEND_CAP,
+    suppression_days: int = DEFAULT_SUPPRESSION_DAYS,
+) -> dict:
+    """run_checkin과 동일 파이프라인이되 상태를 쓰지 않는 읽기 전용 미리보기(데모용).
+
+    push_ledger를 증가시키지 않으므로 반복 호출해도 cap을 소모하지 않는다. cap을 적용해
+    잘라내지 않고 억제 후 후보 전체를 score 내림차순으로 반환하며, 오늘 cap 안에 드는 상위
+    N개의 id를 would_push로 표시한다(데모에서 "실제로 어디까지 push되나"를 보여주기 위함).
+
+    Returns:
+        {"slot", "candidates_n", "suppressed_n", "cap", "ranked": [dict...],
+         "would_push": [id...]}.
+    """
+    now_iso = now_iso or datetime.now(UTC).isoformat()
+    candidates = SuggestionGenerator().generate(edith_home, slot, now_iso)
+    candidates_n = len(candidates)
+    candidates = _apply_atrophy_gate(candidates)
+    feedback = _load_feedback(edith_home)
+    candidates, suppressed_n = _apply_suppression_gate(
+        candidates, feedback, now_iso, suppression_days
+    )
+    ranked = sorted(candidates, key=lambda s: s.score, reverse=True)
+    day = _parse_date(now_iso)
+    gate = PushGate(weekday_cap=weekday_cap, weekend_cap=weekend_cap)
+    cap = gate.cap_for(day) if day is not None else weekday_cap
+    return {
+        "slot": slot,
+        "candidates_n": candidates_n,
+        "suppressed_n": suppressed_n,
+        "cap": cap,
+        "ranked": [s.to_dict() for s in ranked],
+        "would_push": [s.id for s in ranked[:cap]],
+    }
+
+
 __all__ = [
     "ATROPHY_PROTECTED",
     "PushGate",
     "Suggestion",
     "SuggestionGenerator",
+    "calendar_conflict_suggestions",
+    "candidate_summary",
+    "digest_suggestions",
+    "health_suggestions",
     "is_atrophy_protected",
+    "preview_checkin",
+    "reading_suggestions",
     "record_feedback",
     "run_checkin",
+    "urgent_mail_suggestions",
 ]

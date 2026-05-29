@@ -1,10 +1,13 @@
-.PHONY: install test run serve lint fmt typecheck eval check lock help
+.PHONY: install test run serve serve-demo seed-demo demo lint fmt typecheck eval check lock help
 
 help:
 	@echo "make install     # uv venv + 의존성 설치 (editable)"
 	@echo "make test        # mock LLM으로 unit test"
 	@echo "make run TASK=...# 실제 Claude API로 task 실행"
 	@echo "make serve       # Web GUI + API 서버 (http://127.0.0.1:8765)"
+	@echo "make seed-demo   # 체감 데모용 raw/ 샘플 시드"
+	@echo "make demo        # 시드 + 아침 brief + 선제 제안 미리보기 (CLI 한 화면)"
+	@echo "make serve-demo  # 시드 후 GUI 서버 (Brief 탭에 데모 데이터)"
 	@echo "make eval        # golden YAML 케이스 일괄 실행 (H4)"
 	@echo "make lint        # ruff check"
 	@echo "make fmt         # ruff format"
@@ -91,6 +94,20 @@ weekly:
 
 tick:
 	uv run harness tick
+
+# ── 체감 데모 (노트북에서 바로 경험) ──
+
+seed-demo:
+	uv run harness seed-demo
+
+demo:
+	uv run harness demo
+
+# 시드/서버 모두 Edith 시간대(기본 KST, EDITH_TZ_OFFSET_HOURS로 override) 기준 '오늘'.
+serve-demo: seed-demo
+	@echo "Edith Web GUI (demo seed) → http://127.0.0.1:8765  (Ctrl+C 종료)"
+	EDITH_CALENDAR_FIXTURE="$(CURDIR)/raw/calendar/events.json" \
+		uv run uvicorn harness.server:app --host 127.0.0.1 --port 8765
 
 # ── F11 Home Hub (docker) ──
 

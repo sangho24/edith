@@ -44,9 +44,19 @@ class CalendarSource(ABC):
     @abstractmethod
     def list_events(self, start: datetime, end: datetime) -> list[CalendarEvent]: ...
 
-    def today(self) -> list[CalendarEvent]:
-        now = datetime.now(UTC)
-        start = datetime.combine(now.date(), time.min, tzinfo=UTC)
+    def today(self, now: datetime | None = None) -> list[CalendarEvent]:
+        if now is None:
+            # 기존 호환: now 미지정이면 UTC 날짜 창 (None 경로는 건드리지 않는다).
+            ref = datetime.now(UTC)
+            tz = UTC
+            day = ref.date()
+        else:
+            # now 명시: '오늘'을 Edith 시간대(기본 KST)로 통일 — UTC now가 와도 사용자 날짜.
+            from harness.localtime import edith_today, edith_tz
+
+            tz = edith_tz()
+            day = edith_today(now)
+        start = datetime.combine(day, time.min, tzinfo=tz)
         end = start + timedelta(days=1)
         return self.list_events(start, end)
 
@@ -168,9 +178,9 @@ def select_source(
     return LocalCalendarSource(home / "raw" / "calendar" / "events.json")
 
 
-def today_view(source: CalendarSource) -> dict:
-    """오늘 일정 요약 dict."""
-    events = source.today()
+def today_view(source: CalendarSource, now: datetime | None = None) -> dict:
+    """오늘 일정 요약 dict. now 주입 시 그 날짜·tz 기준(테스트/데모 결정성)."""
+    events = source.today(now)
     return {
         "n_events": len(events),
         "events": [

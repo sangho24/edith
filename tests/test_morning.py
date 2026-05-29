@@ -145,6 +145,33 @@ def test_compose_full(edith_home: Path) -> None:
     assert brief.digest["n"] == 3
 
 
+def test_compose_brief_now_uses_edith_tz_window(edith_home: Path) -> None:
+    """now가 UTC여도 '오늘'을 Edith 시간대(KST)로 잡아 그날(KST) 일정·헬스를 포함한다.
+
+    회귀 가드(리뷰 confirmed critical): now=2026-05-28 23:00 UTC = 2026-05-29 08:00 KST.
+    데이터는 KST 2026-05-29. 수정 전이면 UTC date 05-28 창 → KST 05-29 이벤트·수면 누락.
+    """
+    ev = [
+        {
+            "id": "x", "title": "회의", "attendees": [],
+            "start": "2026-05-29T10:00:00+09:00", "end": "2026-05-29T11:00:00+09:00",
+        }
+    ]
+    (edith_home / "raw" / "calendar" / "events.json").write_text(
+        json.dumps(ev, ensure_ascii=False), encoding="utf-8"
+    )
+    (edith_home / "raw" / "health" / "export.xml").write_text(
+        '<?xml version="1.0"?>\n<HealthData>\n'
+        '<Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Mi Fitness" '
+        'unit="" startDate="2026-05-29 00:30:00 +0900" endDate="2026-05-29 05:30:00 +0900" '
+        'value="HKCategoryValueSleepAnalysisAsleepUnspecified"/>\n</HealthData>\n',
+        encoding="utf-8",
+    )
+    brief = compose_brief(edith_home, now=datetime(2026, 5, 28, 23, 0, tzinfo=UTC))
+    assert brief.today["n_events"] == 1  # KST date 창 → 이벤트 포함
+    assert brief.health.get("sleep") == 300.0  # KST date 창 → 수면 포함
+
+
 def test_top3_priority_order() -> None:
     today = {
         "n_events": 2,
