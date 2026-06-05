@@ -425,6 +425,42 @@ def tick(now: str | None, tick_seconds: int) -> None:
         click.echo("(no trigger fired this tick)")
 
 
+@main.group("oauth")
+def oauth_group() -> None:
+    """외부 서비스 OAuth 설정."""
+
+
+@oauth_group.command("google")
+@click.option("--status", is_flag=True, help="토큰/시크릿 상태만 출력 (flow 실행 안 함)")
+def oauth_google(status: bool) -> None:
+    """Gmail+Calendar 통합 OAuth 동의 flow(브라우저) → 토큰 저장.
+
+    사전: Google Cloud Console에서 OAuth 클라이언트(데스크톱 앱) 만들어 받은 JSON을
+    secrets/google_oauth.json (또는 GOOGLE_OAUTH_CLIENT_SECRETS_FILE)에 둔다.
+    동의 후 EDITH_MAIL_BACKEND=gmail / EDITH_CALENDAR_BACKEND=google 로 실연동.
+    """
+    from harness.integrations.google_auth import run_oauth_flow, token_status
+
+    if status:
+        st = token_status()
+        click.echo(f"token  : {st['token_file']} ({'있음' if st['token_exists'] else '없음'})")
+        click.echo(f"secret : {st['secrets_file']} ({'있음' if st['secrets_exists'] else '없음'})")
+        for s in st["scopes"]:
+            click.echo(f"  scope: {s}")
+        if not st["secrets_exists"]:
+            click.echo("→ 먼저 client secret JSON을 secrets/google_oauth.json 에 두세요.")
+        return
+
+    try:
+        res = run_oauth_flow()
+    except RuntimeError as e:
+        click.echo(f"✗ {e}", err=True)
+        sys.exit(1)
+    click.echo(f"✓ 토큰 저장: {res['token_file']}")
+    click.echo("  scopes: " + ", ".join(res["scopes"]))
+    click.echo("  실연동: EDITH_MAIL_BACKEND=gmail EDITH_CALENDAR_BACKEND=google make brief")
+
+
 @main.command("seed-demo")
 @click.option("--force", is_flag=True, help="기존 파일도 덮어쓰기")
 @click.option("--date", "date_str", default=None, help="시드 기준일 YYYY-MM-DD (기본 오늘 KST)")

@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from harness.mail import (
-    GmailSource,
+    GmailMessageSource,
     LocalMessageSource,
     Message,
     Priority,
@@ -271,11 +271,15 @@ def test_render_triage_shows_counts() -> None:
     assert "+25건" in text  # truncation hint
 
 
-# ── GmailSource placeholder ──
+# ── GmailMessageSource (미설정 시 안전 실패) ──
 
 
-def test_gmail_source_raises_when_unconfigured(tmp_path: Path) -> None:
-    src = GmailSource(token_path=tmp_path / "no_token.json")
-    with pytest.raises(RuntimeError) as exc:
+def test_gmail_message_source_raises_when_unconfigured(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # 토큰·시크릿 경로를 빈 곳으로 → 실 호출 시 토큰 없어 RuntimeError(브라우저 flow X).
+    monkeypatch.setenv("GOOGLE_TOKEN_FILE", str(tmp_path / "no_token.json"))
+    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_SECRETS_FILE", str(tmp_path / "no_secret.json"))
+    src = GmailMessageSource()  # source 미주입 → lazy 실 호출
+    with pytest.raises(RuntimeError):
         src.list_unread()
-    assert "OAuth" in str(exc.value)

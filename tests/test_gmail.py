@@ -196,8 +196,9 @@ def test_gmail_source_parse_internal_date() -> None:
     )
     src = GmailSource(service=service)
     out = src.list_unread(1)
-    # epoch_ms = 1714377600000 → 2024-04-29 (timezone 처리 별도)
+    # epoch_ms = 1714377600000 → 2024-04-29
     assert out[0].date.year == 2024
+    assert out[0].date.tzinfo is not None  # UTC-aware — fixture(aware)와 섞여도 정렬 안전
 
 
 def test_gmail_source_unread_label_detection() -> None:
@@ -237,9 +238,9 @@ def test_get_source_raise_no_secrets_no_fallback(
 # ── 상수 검증 ───────────────────────────────────────────────────────────
 
 
-def test_gmail_scopes_match_google_console() -> None:
-    """Google Cloud OAuth 동의화면에 등록된 scope 와 같아야 함."""
+def test_gmail_scopes_minimal_unified() -> None:
+    """Gmail+Calendar 단일 토큰의 최소 scope — modify(수정/삭제)는 요청하지 않는다."""
     assert "https://www.googleapis.com/auth/gmail.readonly" in GMAIL_SCOPES
     assert "https://www.googleapis.com/auth/gmail.send" in GMAIL_SCOPES
-    assert "https://www.googleapis.com/auth/gmail.modify" in GMAIL_SCOPES
-    assert len(GMAIL_SCOPES) == 3
+    assert "https://www.googleapis.com/auth/calendar.readonly" in GMAIL_SCOPES
+    assert "https://www.googleapis.com/auth/gmail.modify" not in GMAIL_SCOPES

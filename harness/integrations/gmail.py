@@ -17,16 +17,15 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
-# Gmail API scopes — Google Cloud OAuth 동의 화면에 등록된 거와 일치해야 함.
-GMAIL_SCOPES = [
-    "https://www.googleapis.com/auth/gmail.readonly",
-    "https://www.googleapis.com/auth/gmail.send",
-    "https://www.googleapis.com/auth/gmail.modify",
-]
+from harness.integrations.google_auth import GOOGLE_SCOPES, load_google_credentials
+
+# Gmail은 Calendar와 단일 토큰을 공유한다(google_auth.GOOGLE_SCOPES). 최소 권한 —
+# 읽기 + 발송만, modify(삭제·수정)는 요청하지 않는다. 별도 credential 로딩 경로를 두지 않음.
+GMAIL_SCOPES = GOOGLE_SCOPES
 
 
 @dataclass(frozen=True)
@@ -72,49 +71,6 @@ class MockMailSource:
         return [m for m in self._messages if m.thread_id == thread_id]
 
 
-def _load_credentials(
-    secrets_file: Path,
-    token_file: Path,
-    scopes: list[str],
-) -> Any:
-    """Google OAuth credentials 로드 (또는 첫 OAuth flow 실행).
-
-    google-auth-oauthlib · google-auth · google-api-python-client 필요.
-    """
-    try:
-        from google.auth.transport.requests import Request  # type: ignore[import-not-found]
-        from google.oauth2.credentials import Credentials  # type: ignore[import-not-found]
-        from google_auth_oauthlib.flow import InstalledAppFlow  # type: ignore[import-not-found]
-    except ImportError as e:
-        raise RuntimeError(
-            "Google API 클라이언트 필요. "
-            "uv pip install google-auth-oauthlib google-api-python-client"
-        ) from e
-
-    creds: Any = None
-    if token_file.exists():
-        creds = Credentials.from_authorized_user_file(str(token_file), scopes)
-
-    if creds and creds.valid:
-        return creds
-
-    if creds and creds.expired and creds.refresh_token:
-        creds.refresh(Request())
-        token_file.write_text(creds.to_json(), encoding="utf-8")
-        return creds
-
-    if not secrets_file.exists():
-        raise RuntimeError(
-            f"OAuth secrets 파일 없음: {secrets_file}. "
-            "Google Cloud Console 에서 download 하세요."
-        )
-    flow = InstalledAppFlow.from_client_secrets_file(str(secrets_file), scopes)
-    creds = flow.run_local_server(port=8080)
-    token_file.parent.mkdir(parents=True, exist_ok=True)
-    token_file.write_text(creds.to_json(), encoding="utf-8")
-    return creds
-
-
 class GmailSource:
     """실 Gmail API 호출.
 
@@ -148,11 +104,15 @@ class GmailSource:
         )
         scopes = scopes or GMAIL_SCOPES
 
-        creds = _load_credentials(secrets_file, token_file, scopes)
+        # 읽기/발송 경로는 브라우저 flow를 절대 트리거하지 않는다(allow_flow=False).
+        # 토큰 발급은 `harness oauth google`(run_oauth_flow)에서만.
+        creds = load_google_credentials(
+            secrets_file=secrets_file, token_file=token_file, scopes=scopes, allow_flow=False
+        )
         try:
             from googleapiclient.discovery import build  # type: ignore[import-not-found]
         except ImportError as e:
-            raise RuntimeError("uv pip install google-api-python-client") from e
+            raise RuntimeError('uv pip install -e ".[google]"') from e
         self._service = build("gmail", "v1", credentials=creds, cache_discovery=False)
 
     def list_unread(self, max_results: int = 20) -> list[MailMessage]:
@@ -202,7 +162,7 @@ class GmailSource:
     def _parse(self, m: dict[str, Any]) -> MailMessage:
         headers = {h["name"].lower(): h["value"] for h in m.get("payload", {}).get("headers", [])}
         labels = tuple(m.get("labelIds", []))
-        # Gmail internalDate 는 epoch ms.
+        # Gmail internalDate 는 epoch ms. UTC-aware로 — fixture(aware)와 섞여 정렬돼도 안전.
         ts_ms = int(m.get("internalDate", 0))
         return MailMessage(
             id=m["id"],
@@ -210,7 +170,7 @@ class GmailSource:
             sender=headers.get("from", ""),
             subject=headers.get("subject", ""),
             snippet=m.get("snippet", ""),
-            date=datetime.fromtimestamp(ts_ms / 1000) if ts_ms else datetime.min,
+            date=datetime.fromtimestamp(ts_ms / 1000, tz=UTC) if ts_ms else datetime.min,
             labels=labels,
             is_unread="UNREAD" in labels,
         )

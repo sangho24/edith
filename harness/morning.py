@@ -22,7 +22,7 @@ from pathlib import Path
 from harness.calendar import select_source, today_view
 from harness.integrations.apple_health import daily_summary, format_for_brief, get_health_source
 from harness.integrations.ds_digest import LocalDigestSource, get_digest_source
-from harness.mail import LocalMessageSource, triage
+from harness.mail import select_mail_source, triage
 
 
 @dataclass
@@ -138,11 +138,8 @@ def compose_brief(edith_home: Path, now: datetime | None = None) -> MorningBrief
     )
     brief.today = today_view(cal_source, now)
 
-    # 2. 메일
-    mail_path = Path(
-        os.environ.get("EDITH_MAIL_FIXTURE") or (edith_home / "raw" / "mail" / "messages.json")
-    )
-    items = triage(LocalMessageSource(mail_path).list_unread())
+    # 2. 메일 — fixture/local(raw) 또는 EDITH_MAIL_BACKEND=gmail 실연동
+    items = triage(select_mail_source(edith_home).list_unread())
     counts = Counter(i.priority for i in items)
     brief.mail_summary = {
         "n_unread": len(items),

@@ -9,12 +9,13 @@ priority 분류 룰: urgent / important / notification / newsletter / normal.
 from __future__ import annotations
 
 import json
+import os
 from abc import ABC, abstractmethod
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Literal, get_args
+from typing import Any, Literal, get_args
 
 Priority = Literal["urgent", "important", "notification", "newsletter", "normal"]
 PRIORITY_ORDER: tuple[Priority, ...] = get_args(Priority)
@@ -69,19 +70,58 @@ class LocalMessageSource(MessageSource):
         return msgs[:limit]
 
 
-class GmailSource(MessageSource):
-    """Gmail API readonly metadata. OAuth 필요. F3.x에서 구현."""
+def _gmail_to_message(mm: Any) -> Message:
+    """integrations.gmail.MailMessage → F3 triage용 Message."""
+    return Message(
+        id=mm.id,
+        sender=mm.sender,
+        subject=mm.subject,
+        snippet=mm.snippet,
+        received_at=mm.date,
+        labels=list(mm.labels),
+        unread=mm.is_unread,
+        thread_id=mm.thread_id,
+    )
 
-    def __init__(self, token_path: Path | None = None) -> None:
-        self.token_path = token_path or Path.home() / ".config" / "edith" / "gmail_token.json"
+
+class GmailMessageSource(MessageSource):
+    """실 Gmail(integrations.gmail.GmailSource)을 F3 Message 인터페이스로 어댑트.
+
+    실 호출은 google_auth 단일 토큰 필요(`harness oauth google`). 테스트는 source 주입
+    (MockMailSource 등)으로 라이브러리/토큰 없이 검증.
+    """
+
+    def __init__(self, source: Any = None) -> None:
+        self._source = source
+
+    def _src(self) -> Any:
+        if self._source is None:
+            from harness.integrations.gmail import GmailSource
+
+            self._source = GmailSource()
+        return self._source
 
     def list_unread(self, limit: int = 50) -> list[Message]:
-        if not self.token_path.exists():
-            raise RuntimeError(
-                f"Gmail OAuth 미설정 ({self.token_path} 없음). "
-                f"F3.x: `harness oauth gmail` 명령으로 설정 예정."
-            )
-        raise NotImplementedError("F3.x에서 google-api-python-client 통합")
+        return [_gmail_to_message(mm) for mm in self._src().list_unread(max_results=limit)]
+
+
+def select_mail_source(edith_home: Path) -> MessageSource:
+    """환경에 맞는 메일 source 선택.
+
+    1. EDITH_MAIL_FIXTURE → LocalMessageSource (테스트/시연 override)
+    2. EDITH_MAIL_BACKEND=gmail → GmailMessageSource (실 Gmail 연동)
+    3. fallback → LocalMessageSource(edith_home/raw/mail/messages.json)
+    """
+    fixture = os.environ.get("EDITH_MAIL_FIXTURE")
+    if fixture:
+        return LocalMessageSource(Path(fixture))
+    if os.environ.get("EDITH_MAIL_BACKEND", "").lower() == "gmail":
+        from harness.integrations.google_auth import has_google_token
+
+        # 토큰 없으면 brief가 RuntimeError로 깨지지 않게 local로 폴백.
+        if has_google_token():
+            return GmailMessageSource()
+    return LocalMessageSource(edith_home / "raw" / "mail" / "messages.json")
 
 
 # ── Priority classification rules (precedence 순서) ──

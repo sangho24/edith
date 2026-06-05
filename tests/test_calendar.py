@@ -285,8 +285,12 @@ def test_eventkit_adapter_handles_missing_optional_fields() -> None:
         assert events[0].description is None
 
 
-def test_google_source_raises_when_unconfigured(tmp_path: Path) -> None:
-    src = GoogleCalendarSource(token_path=tmp_path / "missing.json")
-    with pytest.raises(RuntimeError) as exc:
+def test_google_source_raises_when_unconfigured(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # service 미주입 + 토큰/시크릿 없음 → 빌드 시 RuntimeError (브라우저 flow X).
+    monkeypatch.setenv("GOOGLE_TOKEN_FILE", str(tmp_path / "missing_token.json"))
+    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_SECRETS_FILE", str(tmp_path / "missing_secret.json"))
+    src = GoogleCalendarSource()
+    with pytest.raises(RuntimeError):
         src.today()
-    assert "OAuth" in str(exc.value)

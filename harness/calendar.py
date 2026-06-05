@@ -10,9 +10,10 @@ today_view(source) → 오늘 일정 list + busy minutes 합계.
 from __future__ import annotations
 
 import json
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import UTC, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -95,19 +96,87 @@ class LocalCalendarSource(CalendarSource):
         return events
 
 
-class GoogleCalendarSource(CalendarSource):
-    """Google Calendar API readonly. OAuth 필요. F2.x에서 구현."""
+def _parse_google_dt(d: dict[str, Any]) -> datetime | None:
+    """Google event start/end → **항상 tz-aware** datetime.
 
-    def __init__(self, token_path: Path | None = None) -> None:
-        self.token_path = token_path or Path.home() / ".config" / "edith" / "google_token.json"
+    timed={'dateTime': ISO(+offset|Z)}, all-day={'date': 'YYYY-MM-DD'}.
+    all-day와 tz 없는 dateTime은 Edith 시간대(기본 KST)로 해석한다 — UTC midnight으로 두면
+    KST 사용자에게 09:00으로 밀려 보이고(잘못된 날), naive/aware가 섞이면 정렬·연산이 깨진다.
+    """
+    from harness.localtime import edith_tz
+
+    tz = edith_tz()
+    if "dateTime" in d:
+        try:
+            dt = datetime.fromisoformat(str(d["dateTime"]))
+        except (ValueError, TypeError):
+            return None
+        return dt if dt.tzinfo is not None else dt.replace(tzinfo=tz)
+    if "date" in d:
+        try:
+            day = date.fromisoformat(str(d["date"]))
+        except (ValueError, TypeError):
+            return None
+        return datetime.combine(day, time.min, tzinfo=tz)
+    return None
+
+
+def _parse_google_event(item: dict[str, Any]) -> CalendarEvent | None:
+    """Google Calendar events.list item → CalendarEvent (start/end 누락 시 None)."""
+    start = _parse_google_dt(item.get("start", {}) or {})
+    end = _parse_google_dt(item.get("end", {}) or {})
+    if start is None or end is None:
+        return None
+    attendees = [a.get("email", "") for a in item.get("attendees", []) if a.get("email")]
+    return CalendarEvent(
+        id=item.get("id", ""),
+        title=item.get("summary", "(제목 없음)"),
+        start=start,
+        end=end,
+        attendees=attendees,
+        description=item.get("description"),
+        location=item.get("location"),
+        url=item.get("htmlLink"),
+    )
+
+
+class GoogleCalendarSource(CalendarSource):
+    """Google Calendar API readonly. google_auth 단일 토큰 공유.
+
+    실 호출은 google-api-python-client + 저장된 토큰 필요(`harness oauth google`).
+    테스트는 service 주입으로 라이브러리/토큰 없이 검증.
+    """
+
+    def __init__(self, service: Any = None, calendar_id: str = "primary") -> None:
+        self._service = service
+        self.calendar_id = calendar_id
+
+    def _svc(self) -> Any:
+        if self._service is None:
+            from harness.integrations.google_auth import build_google_service
+
+            self._service = build_google_service("calendar", "v3")
+        return self._service
 
     def list_events(self, start: datetime, end: datetime) -> list[CalendarEvent]:
-        if not self.token_path.exists():
-            raise RuntimeError(
-                f"Google OAuth 미설정 ({self.token_path} 없음). "
-                f"F2.x: `harness oauth google` 명령으로 설정 예정."
+        resp = (
+            self._svc()
+            .events()
+            .list(
+                calendarId=self.calendar_id,
+                timeMin=start.isoformat(),
+                timeMax=end.isoformat(),
+                singleEvents=True,
+                orderBy="startTime",
             )
-        raise NotImplementedError("F2.x에서 google-api-python-client 통합")
+            .execute()
+        )
+        out: list[CalendarEvent] = []
+        for item in resp.get("items", []):
+            ev = _parse_google_event(item)
+            if ev is not None:
+                out.append(ev)
+        return out
 
 
 class EventKitCalendarSource(CalendarSource):
@@ -160,22 +229,35 @@ def select_source(
 
     우선순위:
     1. fixture_path 명시 → LocalCalendarSource (테스트/시연 override)
-    2. macOS + pyobjc-framework-EventKit → EventKitCalendarSource
-    3. fallback → LocalCalendarSource(edith_home/raw/calendar/events.json)
+    2. EDITH_CALENDAR_BACKEND=google → GoogleCalendarSource (실 Google Calendar)
+       EDITH_CALENDAR_BACKEND=local → LocalCalendarSource (EventKit 건너뜀)
+    3. (backend 미지정) macOS + pyobjc-framework-EventKit → EventKitCalendarSource
+    4. fallback → LocalCalendarSource(edith_home/raw/calendar/events.json)
     """
     import sys
 
     if fixture_path is not None:
         return LocalCalendarSource(fixture_path)
 
-    if sys.platform == "darwin":
+    home = edith_home or Path.home() / "edith"
+    local = LocalCalendarSource(home / "raw" / "calendar" / "events.json")
+
+    backend = os.environ.get("EDITH_CALENDAR_BACKEND", "").lower()
+    if backend == "google":
+        from harness.integrations.google_auth import has_google_token
+
+        # 토큰 없으면 brief가 RuntimeError로 깨지지 않게 local로 폴백.
+        return GoogleCalendarSource() if has_google_token() else local
+    if backend == "local":
+        return local
+
+    if backend in ("", "eventkit") and sys.platform == "darwin":
         try:
             return EventKitCalendarSource()
-        except RuntimeError:
+        except (RuntimeError, ImportError):
             pass
 
-    home = edith_home or Path.home() / "edith"
-    return LocalCalendarSource(home / "raw" / "calendar" / "events.json")
+    return local
 
 
 def today_view(source: CalendarSource, now: datetime | None = None) -> dict:
