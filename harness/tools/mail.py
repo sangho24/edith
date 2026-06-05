@@ -1,30 +1,21 @@
 """mail_triage tool — F3 LLM 통합.
 
 LLM이 "오늘 답해야 할 메일?" task를 받으면 이 tool 호출.
-EDITH_MAIL_FIXTURE 환경변수 또는 raw/mail/messages.json 에서 읽기.
-F3.x에서 GmailSource 우선 사용으로 전환.
+select_mail_source가 EDITH_MAIL_BACKEND=gmail(실연동)·EDITH_MAIL_FIXTURE·local(raw)을 분기.
 """
 
 from __future__ import annotations
 
-import os
 from collections import Counter
-from pathlib import Path
 from typing import Any
 
-from harness.mail import LocalMessageSource, triage
+from harness.mail import select_mail_source, triage
 from harness.state import Context
 from harness.tools import Tool
 
 
 def _mail_triage(args: dict[str, Any], ctx: Context) -> dict[str, Any]:
-    fixture_path_env = os.environ.get("EDITH_MAIL_FIXTURE")
-    fixture_path = (
-        Path(fixture_path_env)
-        if fixture_path_env
-        else ctx.edith_home / "raw" / "mail" / "messages.json"
-    )
-    source = LocalMessageSource(fixture_path)
+    source = select_mail_source(ctx.edith_home)
     limit = int(args.get("limit", 50))
     messages = source.list_unread(limit=limit)
     items = triage(messages)
