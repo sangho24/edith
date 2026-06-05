@@ -58,11 +58,13 @@ def run(
             break
         if trace.n_steps >= budget.max_steps:
             trace.finalize_reason = "budget_steps"
-            trace.record("finalize", reason="budget_steps", steps=trace.n_steps)
+            trace.record(
+                "finalize", reason="budget_steps", steps=trace.n_steps, cost=trace.cost_tokens
+            )
             break
         if (time.time() - started) > budget.max_seconds:
             trace.finalize_reason = "budget_time"
-            trace.record("finalize", reason="budget_time")
+            trace.record("finalize", reason="budget_time", cost=trace.cost_tokens)
             break
 
         # LLM 호출
@@ -81,7 +83,9 @@ def run(
         if resp.stop_reason == "end_turn":
             trace.output = resp.text
             trace.finalize_reason = "end_turn"
-            trace.record("finalize", reason="end_turn", out_len=len(resp.text))
+            trace.record(
+                "finalize", reason="end_turn", out_len=len(resp.text), cost=trace.cost_tokens
+            )
             break
 
         # tool_use — 각 tool 호출
@@ -142,7 +146,7 @@ def run(
 
         # 알 수 없는 stop_reason
         trace.finalize_reason = "unknown_stop"
-        trace.record("finalize", reason=f"stop:{resp.stop_reason}")
+        trace.record("finalize", reason=f"stop:{resp.stop_reason}", cost=trace.cost_tokens)
         break
 
     # trace 자동 저장
