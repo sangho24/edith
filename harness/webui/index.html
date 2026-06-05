@@ -354,7 +354,12 @@ async function send() {
   finally { sendBtn.disabled = false; input.focus(); }
 }
 sendBtn.onclick = send;
-input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } });
+input.addEventListener("keydown", (e) => {
+  // 한글 IME 조합 중 Enter는 무시 — 마지막 글자가 다음 입력에 딸려가는 버그 방지.
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
+    e.preventDefault(); send();
+  }
+});
 
 async function loadBrief() {
   try { const d = await (await fetch("/ui/brief")).json(); $("#brief").textContent = d.text || "(브리프 없음)"; }
