@@ -129,6 +129,20 @@ class GmailSource:
         resp = self._service.users().threads().get(userId="me", id=thread_id).execute()
         return [self._parse(m) for m in resp.get("messages", [])]
 
+    def search(self, query: str, max_results: int = 20) -> list[MailMessage]:
+        """전체 메일에서 검색(읽음·안읽음·과거 무관). Gmail 검색 문법 그대로 사용.
+
+        예: 'from:비씨카드', '계약서', 'newer_than:7d', 'subject:결과'.
+        """
+        resp = (
+            self._service.users()
+            .messages()
+            .list(userId="me", q=query, maxResults=max_results)
+            .execute()
+        )
+        msg_ids = [m["id"] for m in resp.get("messages", [])]
+        return [self._fetch_message(mid) for mid in msg_ids]
+
     def send_message(self, to: str, subject: str, body: str) -> dict[str, Any]:
         """메일 발송 (gmail.send scope 필요).
 

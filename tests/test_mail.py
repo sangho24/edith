@@ -271,6 +271,31 @@ def test_render_triage_shows_counts() -> None:
     assert "+25건" in text  # truncation hint
 
 
+# ── LocalMessageSource.search (읽음·안읽음 무관) ──
+
+
+def test_local_search_includes_read_mail(tmp_path: Path) -> None:
+    msgs = [
+        {
+            "id": "1", "sender": "비씨카드 <no@bccard>", "subject": "채용 결과 안내",
+            "snippet": "", "received_at": "2026-06-05T07:00:00+09:00",
+            "labels": [], "unread": False,  # 읽음
+        },
+        {
+            "id": "2", "sender": "x@y", "subject": "주간 뉴스레터",
+            "snippet": "", "received_at": "2026-06-04T07:00:00+09:00",
+            "labels": [], "unread": True,
+        },
+    ]
+    p = tmp_path / "m.json"
+    p.write_text(json.dumps(msgs, ensure_ascii=False), encoding="utf-8")
+    src = LocalMessageSource(p)
+    hits = src.search("비씨카드")
+    assert len(hits) == 1 and hits[0].id == "1"  # 읽은 메일도 검색됨
+    assert src.search("뉴스레터")[0].id == "2"
+    assert src.search("없는단어") == []
+
+
 # ── GmailMessageSource (미설정 시 안전 실패) ──
 
 

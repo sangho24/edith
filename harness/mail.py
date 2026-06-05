@@ -37,6 +37,9 @@ class MessageSource(ABC):
     @abstractmethod
     def list_unread(self, limit: int = 50) -> list[Message]: ...
 
+    @abstractmethod
+    def search(self, query: str, limit: int = 20) -> list[Message]: ...
+
 
 class LocalMessageSource(MessageSource):
     """JSON fixture에서 메시지 로드 (test/dev)."""
@@ -68,6 +71,38 @@ class LocalMessageSource(MessageSource):
         msgs = [m for m in msgs if m.unread]
         msgs.sort(key=lambda m: m.received_at, reverse=True)
         return msgs[:limit]
+
+    def _load_all(self) -> list[Message]:
+        if not self.messages_path.exists():
+            return []
+        try:
+            data = json.loads(self.messages_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return []
+        return [
+            Message(
+                id=item["id"],
+                sender=item["sender"],
+                subject=item.get("subject", ""),
+                snippet=item.get("snippet", ""),
+                received_at=datetime.fromisoformat(item["received_at"]),
+                labels=item.get("labels", []),
+                unread=item.get("unread", True),
+                thread_id=item.get("thread_id"),
+            )
+            for item in data
+        ]
+
+    def search(self, query: str, limit: int = 20) -> list[Message]:
+        """전체(읽음·안읽음) 메시지에서 subject/sender/snippet substring 매칭."""
+        q = query.lower()
+        out = [
+            m
+            for m in self._load_all()
+            if q in f"{m.subject} {m.sender} {m.snippet}".lower()
+        ]
+        out.sort(key=lambda m: m.received_at, reverse=True)
+        return out[:limit]
 
 
 def _gmail_to_message(mm: Any) -> Message:
@@ -103,6 +138,10 @@ class GmailMessageSource(MessageSource):
 
     def list_unread(self, limit: int = 50) -> list[Message]:
         return [_gmail_to_message(mm) for mm in self._src().list_unread(max_results=limit)]
+
+    def search(self, query: str, limit: int = 20) -> list[Message]:
+        """실 Gmail 검색(읽음·안읽음·과거 무관). Gmail 검색 문법 그대로."""
+        return [_gmail_to_message(mm) for mm in self._src().search(query, max_results=limit)]
 
 
 def select_mail_source(edith_home: Path) -> MessageSource:

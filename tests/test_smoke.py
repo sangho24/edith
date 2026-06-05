@@ -106,10 +106,10 @@ def test_policy_blocks_external_write(edith_home: Path) -> None:
 
 
 def test_registry_has_expected_tools() -> None:
-    """기본 registry에 skill manifest의 모든 tool 등록 (P1: 9 + P3: 8 + P4: 1 + P5: 2)."""
+    """기본 registry에 skill manifest의 모든 tool 등록 (P1: 9 + P3: 9 + P4: 1 + P5: 2)."""
     reg = build_default_registry()
     specs = reg.all_specs()
-    assert len(specs) == 20
+    assert len(specs) == 21
     names = {t["name"] for t in specs}
     expected = {
         # Phase 1 — core skill
@@ -125,6 +125,7 @@ def test_registry_has_expected_tools() -> None:
         # Phase 3 F2/F3
         "calendar_today",
         "mail_triage",
+        "mail_search",
         # Phase 3 F4
         "digest_latest",
         "github_workflow_get_cron",

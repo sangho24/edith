@@ -49,3 +49,47 @@ MAIL_TRIAGE = Tool(
     },
     fn=_mail_triage,
 )
+
+
+def _mail_search(args: dict[str, Any], ctx: Context) -> dict[str, Any]:
+    query = str(args.get("query", "")).strip()
+    if not query:
+        return {"error": "query 필요"}
+    limit = int(args.get("limit", 20))
+    source = select_mail_source(ctx.edith_home)
+    try:
+        items = source.search(query, limit=limit)
+    except Exception as e:  # noqa: BLE001 — 검색 실패를 결과로 흡수
+        return {"error": f"검색 실패: {type(e).__name__}: {e}"}
+    return {
+        "query": query,
+        "n": len(items),
+        "items": [
+            {
+                "id": m.id,
+                "sender": m.sender,
+                "subject": m.subject,
+                "received_at": m.received_at.isoformat(),
+                "unread": m.unread,
+            }
+            for m in items
+        ],
+    }
+
+
+MAIL_SEARCH = Tool(
+    name="mail_search",
+    description=(
+        "메일 검색 — 읽음·안읽음·과거 메일 모두. Gmail 검색 문법 지원 "
+        "(예: 'from:비씨카드', 'subject:결과', '계약서', 'newer_than:7d'). read-only."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "검색어 (Gmail 검색 문법 가능)"},
+            "limit": {"type": "integer", "default": 20, "description": "최대 결과 수"},
+        },
+        "required": ["query"],
+    },
+    fn=_mail_search,
+)

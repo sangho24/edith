@@ -176,6 +176,18 @@ def test_gmail_source_list_unread_with_injected_service() -> None:
     assert senders == {"A", "B"}
 
 
+def test_gmail_source_search_with_injected_service() -> None:
+    # 읽음 상태 메일도 검색됨(list q= 경로). 비씨카드 결과 메일 시나리오.
+    fake = _make_fake_service(
+        [_fake_gmail_message(msg_id="m1", subject="[비씨카드] 채용 결과 안내", labels=["INBOX"])]
+    )
+    src = GmailSource(service=fake)
+    out = src.search("비씨카드", max_results=5)
+    assert len(out) == 1
+    assert "비씨카드" in out[0].subject
+    assert not out[0].is_unread  # 읽은 메일도 잡힘
+
+
 def test_gmail_source_get_thread() -> None:
     service = MagicMock()
     service.users.return_value.threads.return_value.get.return_value.execute.return_value = {
