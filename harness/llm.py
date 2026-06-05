@@ -17,6 +17,18 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
+def _max_output_tokens() -> int:
+    """응답 최대 토큰. EDITH_MAX_TOKENS로 조정(기본 2048).
+
+    낮추면 비용↓·속도↑ + 무료 티어 TPM(입력+max_output 합산 과금)에 들어가기 쉬움.
+    에이전트 루프의 중간(tool 호출)·최종 답변 모두 2048이면 충분.
+    """
+    try:
+        return int(os.environ.get("EDITH_MAX_TOKENS", "2048"))
+    except ValueError:
+        return 2048
+
+
 @dataclass
 class LLMResponse:
     """LLM 호출 응답. stop_reason은 anthropic SDK 값 형식.
@@ -84,7 +96,7 @@ class AnthropicLLM:
         # anthropic SDK는 TypedDict를 요구하지만 dict[str, Any]도 런타임에선 동등.
         resp = self.client.messages.create(
             model=self.model,
-            max_tokens=4096,
+            max_tokens=_max_output_tokens(),
             system=system,
             tools=tools,  # type: ignore[arg-type]
             messages=messages,  # type: ignore[arg-type]
@@ -285,7 +297,7 @@ class GrokLLM:
         kwargs: dict[str, Any] = {
             "model": self.model,
             "messages": oai_messages,
-            "max_tokens": 4096,
+            "max_tokens": _max_output_tokens(),
         }
         if oai_tools:
             kwargs["tools"] = oai_tools
@@ -336,7 +348,7 @@ class GeminiLLM:
         kwargs: dict[str, Any] = {
             "model": self.model,
             "messages": oai_messages,
-            "max_tokens": 4096,
+            "max_tokens": _max_output_tokens(),
         }
         if oai_tools:
             kwargs["tools"] = oai_tools
@@ -391,7 +403,7 @@ class GroqCloudLLM:
         kwargs: dict[str, Any] = {
             "model": self.model,
             "messages": oai_messages,
-            "max_tokens": 4096,
+            "max_tokens": _max_output_tokens(),
         }
         if oai_tools:
             kwargs["tools"] = oai_tools
