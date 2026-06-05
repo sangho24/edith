@@ -168,22 +168,41 @@ def select_mail_source(edith_home: Path) -> MessageSource:
 URGENT_KEYWORDS = ["긴급", "asap", "urgent", "오늘까지", "당일", "deadline", "시급"]
 IMPORTANT_SUBJECT_KEYWORDS = ["회의", "미팅", "면접", "interview", "meeting", "review 요청"]
 NEWSLETTER_SENDER_PATTERNS = ["noreply", "no-reply", "newsletter", "marketing"]
-NEWSLETTER_LABELS = {"category_promotions", "INBOX/Newsletters", "Promotions"}
 NOTIFICATION_SENDERS = ["github", "linkedin", "slack", "notion", "asana", "jira"]
+
+# Gmail 카테고리 탭 라벨 → priority. 실 Gmail은 메일을 PROMOTIONS/UPDATES/SOCIAL/FORUMS로
+# 자동 분류하는데, 이게 "개인이 직접 챙길 메일"이 아니라 뉴스레터·알림 노이즈다.
+# (대소문자 정규화 후 매칭 — 기존엔 'category_promotions' 소문자라 실 라벨 'CATEGORY_PROMOTIONS'와
+#  안 맞아 죄다 normal로 떨어지는 버그가 있었음.)
+GMAIL_CATEGORY_PRIORITY: dict[str, Priority] = {
+    "CATEGORY_PROMOTIONS": "newsletter",
+    "CATEGORY_SOCIAL": "notification",
+    "CATEGORY_FORUMS": "notification",
+    "CATEGORY_UPDATES": "notification",
+}
+NEWSLETTER_LABELS = {"CATEGORY_PROMOTIONS", "INBOX/NEWSLETTERS", "PROMOTIONS"}
 
 
 def classify_priority(msg: Message) -> Priority:
-    """precedence: urgent > important > newsletter > notification > normal."""
+    """precedence: urgent > important > Gmail 카테고리 > sender 패턴 > normal.
+
+    urgent·important(개인이 직접 챙겨야 할 것)는 카테고리보다 우선 — PROMOTIONS에 있어도
+    '긴급'·'면접'이면 urgent/important. 그 외엔 Gmail 카테고리 탭으로 뉴스레터·알림을 가른다.
+    """
     body = (msg.subject + " " + msg.snippet).lower()
     sender = msg.sender.lower()
+    labels = {label.upper() for label in msg.labels}
 
     if any(k in body for k in URGENT_KEYWORDS):
         return "urgent"
     if any(k in msg.subject.lower() for k in IMPORTANT_SUBJECT_KEYWORDS):
         return "important"
+    for cat, pr in GMAIL_CATEGORY_PRIORITY.items():
+        if cat in labels:
+            return pr
     if any(p in sender for p in NEWSLETTER_SENDER_PATTERNS):
         return "newsletter"
-    if NEWSLETTER_LABELS.intersection(msg.labels):
+    if NEWSLETTER_LABELS & labels:
         return "newsletter"
     if any(p in sender for p in NOTIFICATION_SENDERS):
         return "notification"

@@ -271,6 +271,29 @@ def test_render_triage_shows_counts() -> None:
     assert "+25건" in text  # truncation hint
 
 
+# ── Gmail 카테고리 라벨 분류 (실 메일 정확도) ──
+
+
+def test_classify_gmail_category_labels() -> None:
+    from harness.mail import classify_priority
+
+    def mk(subject: str, labels: list[str], sender: str = "x@y") -> Message:
+        return Message(
+            id="1", sender=sender, subject=subject, snippet="",
+            received_at=datetime(2026, 6, 5, tzinfo=UTC), labels=labels, unread=True,
+        )
+
+    # 대문자 카테고리 라벨이 정확히 매칭 (이전엔 소문자 비교라 normal로 오분류).
+    assert classify_priority(mk("세일 50% 할인", ["CATEGORY_PROMOTIONS", "INBOX"])) == "newsletter"
+    assert classify_priority(mk("주간 다이제스트", ["CATEGORY_UPDATES", "INBOX"])) == "notification"
+    assert classify_priority(mk("누가 회원님을 팔로우", ["CATEGORY_SOCIAL"])) == "notification"
+    # urgent·important는 카테고리보다 우선.
+    assert classify_priority(mk("긴급: 결제 실패 안내", ["CATEGORY_PROMOTIONS"])) == "urgent"
+    assert classify_priority(mk("면접 일정 안내드립니다", ["CATEGORY_UPDATES"])) == "important"
+    # 카테고리 없으면 기존 로직대로.
+    assert classify_priority(mk("그냥 개인 메일", ["INBOX"])) == "normal"
+
+
 # ── LocalMessageSource.search (읽음·안읽음 무관) ──
 
 
