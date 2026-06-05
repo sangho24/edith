@@ -287,10 +287,12 @@ def seed_demo_proposal(edith_home: Path, force: bool = False) -> dict:
         wf.write_text(build_demo_workflow(), encoding="utf-8")
 
     store = ProposalStore(edith_home / "harness" / "proposals.json")
+    # 제안은 force와 무관하게 멱등 — 이미 proposed 데모 제안이 있으면 중복 생성하지 않는다
+    # (serve-demo 반복 실행 시 누적 방지). 사용자가 처리(close)하면 다음 호출이 새로 만든다.
     existing = [
         p for p in store.list(status="proposed") if p.trigger == DEMO_PROPOSAL_TRIGGER
     ]
-    if existing and not force:
+    if existing:
         return {"created": False, "proposal_id": existing[0].id, "reason": "already-proposed"}
 
     steps = [

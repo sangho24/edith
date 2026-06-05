@@ -98,13 +98,15 @@ tick:
 # ── 체감 데모 (노트북에서 바로 경험) ──
 
 seed-demo:
-	uv run harness seed-demo
+	uv run harness seed-demo --force
 
 demo:
-	uv run harness demo
+	uv run harness demo --fresh
 
 # 시드/서버 모두 Edith 시간대(기본 KST, EDITH_TZ_OFFSET_HOURS로 override) 기준 '오늘'.
-serve-demo: seed-demo
+# --force/--fresh로 매번 오늘 날짜로 새로 시드 → 날짜 드리프트로 일정·헬스가 빠지지 않게.
+serve-demo:
+	uv run harness seed-demo --force
 	@echo "Edith Web GUI (demo seed) → http://127.0.0.1:8765  (Ctrl+C 종료)"
 	EDITH_CALENDAR_FIXTURE="$(CURDIR)/raw/calendar/events.json" \
 		uv run uvicorn harness.server:app --host 127.0.0.1 --port 8765

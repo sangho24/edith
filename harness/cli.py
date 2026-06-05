@@ -457,7 +457,8 @@ def seed_demo_cmd(force: bool, date_str: str | None) -> None:
 @main.command()
 @click.option("--now", "now_iso_opt", default=None, help="기준 시각 ISO (기본 오늘 08:00 KST)")
 @click.option("--no-seed", is_flag=True, help="시드 생략 (이미 깔려 있을 때)")
-def demo(now_iso_opt: str | None, no_seed: bool) -> None:
+@click.option("--fresh", is_flag=True, help="기존 시드를 기준일로 강제 갱신 (날짜 드리프트 방지)")
+def demo(now_iso_opt: str | None, no_seed: bool, fresh: bool) -> None:
     """체감 데모 — 시드 → 아침 brief → 선제 체크인 미리보기를 한 화면에.
 
     첫 실행은 raw/ 시드를 생성하고(이미 있으면 보존), 이후엔 preview_checkin이
@@ -477,12 +478,13 @@ def demo(now_iso_opt: str | None, no_seed: bool) -> None:
     now_iso = ref.isoformat()
 
     if not no_seed:
-        res = seed_demo(home, target_date=ref.date(), force=False)
+        res = seed_demo(home, target_date=ref.date(), force=fresh)
         if res["written"]:
-            click.echo(f"✓ 시드 생성 ({res['date']}): {', '.join(res['written'])}")
+            act = "갱신" if fresh else "생성"
+            click.echo(f"✓ 시드 {act} ({res['date']}): {', '.join(res['written'])}")
         else:
-            click.echo(f"· 시드 이미 존재 ({res['date']}) — 보존")
-        prop = seed_demo_proposal(home, force=False)
+            click.echo(f"· 시드 이미 존재 ({res['date']}) — 보존 (--fresh로 오늘 갱신)")
+        prop = seed_demo_proposal(home, force=fresh)
         verb = "생성" if prop["created"] else "존재"
         click.echo(f"· 데모 제안 {verb} (id={prop['proposal_id']}) → GUI Proposals 탭")
 
