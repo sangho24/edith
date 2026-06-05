@@ -139,8 +139,22 @@ def _fake_gmail_message(
     }
 
 
+class _FakeBatch:
+    """googleapiclient batch http request mock — 추가된 요청들을 execute 시 콜백 호출."""
+
+    def __init__(self) -> None:
+        self._items: list[Any] = []
+
+    def add(self, req: Any, callback: Any, request_id: str) -> None:
+        self._items.append((request_id, req, callback))
+
+    def execute(self) -> None:
+        for rid, req, cb in self._items:
+            cb(rid, req.execute(), None)
+
+
 def _make_fake_service(messages_to_return: list[dict[str, Any]]) -> Any:
-    """Gmail API service.users().messages().list/get chain 을 mock."""
+    """Gmail API service.users().messages().list/get + batch chain 을 mock."""
     service = MagicMock()
     list_resp = {"messages": [{"id": m["id"]} for m in messages_to_return]}
     by_id = {m["id"]: m for m in messages_to_return}
@@ -149,12 +163,13 @@ def _make_fake_service(messages_to_return: list[dict[str, Any]]) -> Any:
         list_resp
     )
 
-    def get_side_effect(userId: str, id: str, format: str = "full") -> Any:
+    def get_side_effect(userId: str, id: str, **kwargs: Any) -> Any:
         m = MagicMock()
         m.execute.return_value = by_id[id]
         return m
 
     service.users.return_value.messages.return_value.get.side_effect = get_side_effect
+    service.new_batch_http_request.side_effect = lambda: _FakeBatch()
 
     return service
 

@@ -123,7 +123,33 @@ class GmailSource:
             .execute()
         )
         msg_ids = [m["id"] for m in resp.get("messages", [])]
-        return [self._fetch_message(mid) for mid in msg_ids]
+        return self._batch_fetch(msg_ids)
+
+    def _batch_fetch(self, msg_ids: list[str]) -> list[MailMessage]:
+        """메시지 메타데이터를 batch HTTP 한 번에 fetch (N번 GET → 1 batch).
+
+        50건을 순차 GET하면 ~10초, batch면 ~1-2초. 순서는 msg_ids 순으로 보존.
+        """
+        if not msg_ids:
+            return []
+        out: dict[str, MailMessage] = {}
+
+        def _cb(request_id: str, response: Any, exception: Any) -> None:
+            if exception is None and response is not None:
+                out[request_id] = self._parse(response)
+
+        batch = self._service.new_batch_http_request()
+        for i, mid in enumerate(msg_ids):
+            batch.add(
+                self._service.users().messages().get(
+                    userId="me", id=mid, format="metadata",
+                    metadataHeaders=["From", "Subject", "Date"],
+                ),
+                callback=_cb,
+                request_id=str(i),
+            )
+        batch.execute()
+        return [out[str(i)] for i in range(len(msg_ids)) if str(i) in out]
 
     def get_thread(self, thread_id: str) -> list[MailMessage]:
         resp = self._service.users().threads().get(userId="me", id=thread_id).execute()
@@ -141,7 +167,7 @@ class GmailSource:
             .execute()
         )
         msg_ids = [m["id"] for m in resp.get("messages", [])]
-        return [self._fetch_message(mid) for mid in msg_ids]
+        return self._batch_fetch(msg_ids)
 
     def send_message(self, to: str, subject: str, body: str) -> dict[str, Any]:
         """메일 발송 (gmail.send scope 필요).
