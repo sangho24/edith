@@ -5,333 +5,461 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Edith</title>
 <style>
+  /* ── Apple-inspired design tokens (getdesign.md/apple) ── */
   :root {
-    --bg: #15171c; --panel: #1d2027; --line: #2c303a;
-    --fg: #e6e8ec; --dim: #8b909c; --accent: #6ea8fe; --user: #2a3344;
+    --blue: #0066cc; --blue-focus: #0071e3; --blue-soft: #ecf3fc;
+    --ink: #1d1d1f; --muted: #6e6e73; --muted2: #aeaeb2;
+    --canvas: #ffffff; --parchment: #f5f5f7; --pearl: #fafafc;
+    --hairline: #e0e0e0; --divider: #f0f0f0;
+    --green: #1d8a4e; --green-soft: #e7f4ec; --red: #c4341c; --red-soft: #fbecea;
+    --amber: #9a6b00; --amber-soft: #fcf3e2;
+    --r-sm: 8px; --r-md: 11px; --r-lg: 18px; --pill: 9999px;
+    --sans: -apple-system, "SF Pro Text", "SF Pro Display", system-ui,
+            "Apple SD Gothic Neo", "Segoe UI", sans-serif;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
   body {
-    background: var(--bg); color: var(--fg);
-    font: 14px/1.6 -apple-system, "Segoe UI", "Apple SD Gothic Neo", sans-serif;
-    height: 100vh; display: flex; flex-direction: column;
+    background: var(--parchment); color: var(--ink);
+    font: 400 15px/1.47 var(--sans); letter-spacing: -0.2px;
+    -webkit-font-smoothing: antialiased;
   }
-  header {
-    padding: 12px 18px; border-bottom: 1px solid var(--line);
-    display: flex; align-items: center; gap: 14px;
+  .app { display: grid; grid-template-columns: 232px 1fr; height: 100vh; }
+
+  /* ── Sidebar ── */
+  aside {
+    background: var(--canvas); border-right: 1px solid var(--hairline);
+    display: flex; flex-direction: column; padding: 20px 14px;
   }
-  header h1 { font-size: 15px; font-weight: 600; }
-  header .status { font-size: 12px; color: var(--dim); }
-  nav { margin-left: auto; display: flex; gap: 4px; }
-  nav button {
-    background: none; border: 1px solid transparent; color: var(--dim);
-    padding: 5px 12px; border-radius: 7px; cursor: pointer; font-size: 13px;
+  .brand {
+    display: flex; align-items: center; gap: 9px; padding: 4px 8px 18px;
+    font: 600 20px/1 var(--sans); letter-spacing: -0.4px;
   }
-  nav button.on { color: var(--fg); background: var(--panel); border-color: var(--line); }
-  main { flex: 1; overflow-y: auto; padding: 18px; }
-  .tab { display: none; max-width: 760px; margin: 0 auto; }
-  .tab.on { display: block; }
-  .msg { margin-bottom: 14px; }
-  .msg .who { font-size: 11px; color: var(--dim); margin-bottom: 3px; }
+  .brand .dot { width: 9px; height: 9px; border-radius: var(--pill); background: var(--blue); }
+  nav { display: flex; flex-direction: column; gap: 2px; }
+  nav a {
+    display: flex; align-items: center; gap: 11px; padding: 9px 11px;
+    border-radius: var(--r-md); color: var(--muted); cursor: pointer;
+    font-size: 14px; font-weight: 500; user-select: none; text-decoration: none;
+    transition: background .12s, color .12s;
+  }
+  nav a .ic { width: 18px; text-align: center; font-size: 15px; }
+  nav a:hover { background: var(--pearl); color: var(--ink); }
+  nav a.on { background: var(--blue-soft); color: var(--blue); }
+  nav a .badge {
+    margin-left: auto; min-width: 18px; height: 18px; padding: 0 5px;
+    border-radius: var(--pill); background: var(--blue); color: #fff;
+    font-size: 11px; font-weight: 600; display: none; align-items: center;
+    justify-content: center; line-height: 18px;
+  }
+  nav a .badge.show { display: inline-flex; }
+  .usage {
+    margin-top: auto; background: var(--parchment); border-radius: var(--r-lg);
+    padding: 13px 14px;
+  }
+  .usage .lbl { font-size: 11px; color: var(--muted); font-weight: 500; letter-spacing: 0; }
+  .usage .big { font-size: 22px; font-weight: 600; letter-spacing: -0.5px; margin-top: 2px; }
+  .usage .sub { font-size: 12px; color: var(--muted2); margin-top: 1px; }
+
+  /* ── Content ── */
+  .content { display: flex; flex-direction: column; overflow: hidden; }
+  .topbar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 16px 32px; border-bottom: 1px solid var(--hairline); background: var(--canvas);
+  }
+  .topbar .hi { font-size: 15px; font-weight: 600; letter-spacing: -0.3px; }
+  .topbar .date { font-size: 13px; color: var(--muted); }
+  .topbar .status {
+    margin-left: auto; display: flex; align-items: center; gap: 7px;
+    font-size: 12px; color: var(--muted);
+  }
+  .topbar .status .led { width: 7px; height: 7px; border-radius: var(--pill); background: var(--muted2); }
+  .topbar .status .led.ok { background: var(--green); }
+  main { flex: 1; overflow-y: auto; padding: 28px 32px 40px; }
+  .view { display: none; max-width: 940px; }
+  .view.on { display: block; }
+  .hero h2 { font: 600 30px/1.1 var(--sans); letter-spacing: -0.6px; }
+  .hero p { color: var(--muted); margin-top: 4px; font-size: 15px; }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--canvas); border: 1px solid var(--hairline);
+    border-radius: var(--r-lg); padding: 18px 20px;
+  }
+  .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 22px; }
+  .stat { cursor: default; }
+  .stat .k { font-size: 12px; color: var(--muted); font-weight: 500; }
+  .stat .v { font: 600 30px/1.1 var(--sans); letter-spacing: -0.8px; margin-top: 8px; }
+  .stat .d { font-size: 12px; color: var(--muted2); margin-top: 4px; min-height: 16px; }
+  .stat.act { cursor: pointer; transition: border-color .12s; }
+  .stat.act:hover { border-color: var(--blue); }
+  .stat .v.accent { color: var(--blue); }
+  .section-t { font-size: 13px; font-weight: 600; color: var(--muted); margin: 26px 0 10px; letter-spacing: 0; }
+  .list-row { display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--divider); font-size: 14px; }
+  .list-row:last-child { border-bottom: 0; }
+  .list-row .badge-time { color: var(--blue); font-variant-numeric: tabular-nums; min-width: 92px; }
+  .muted { color: var(--muted); }
+
+  /* ── Buttons ── */
+  .btn {
+    font: 500 14px/1 var(--sans); border: 1px solid transparent; border-radius: var(--pill);
+    padding: 9px 18px; cursor: pointer; transition: background .12s, opacity .12s;
+  }
+  .btn-primary { background: var(--blue); color: #fff; }
+  .btn-primary:hover { background: var(--blue-focus); }
+  .btn-ghost { background: var(--canvas); border-color: var(--hairline); color: var(--ink); }
+  .btn-ghost:hover { background: var(--pearl); }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .reload { font-size: 13px; padding: 7px 14px; margin-bottom: 16px; }
+
+  /* ── Chat ── */
+  #view-chat { display: none; max-width: 760px; height: 100%; }
+  #view-chat.on { display: flex; flex-direction: column; }
+  #log { flex: 1; overflow-y: auto; padding-bottom: 8px; }
+  .msg { margin-bottom: 16px; display: flex; flex-direction: column; }
+  .msg.me { align-items: flex-end; }
+  .msg .who { font-size: 11px; color: var(--muted2); margin-bottom: 4px; padding: 0 4px; }
   .msg .body {
-    white-space: pre-wrap; background: var(--panel);
-    padding: 10px 13px; border-radius: 9px; border: 1px solid var(--line);
+    white-space: pre-wrap; max-width: 82%; padding: 11px 15px;
+    border-radius: var(--r-lg); background: var(--canvas); border: 1px solid var(--hairline);
+    line-height: 1.5;
   }
-  .msg.me .body { background: var(--user); }
-  .msg .meta { font-size: 11px; color: var(--dim); margin-top: 3px; }
-  footer { border-top: 1px solid var(--line); padding: 12px 18px; }
-  .composer { max-width: 760px; margin: 0 auto; display: flex; gap: 8px; }
+  .msg.me .body { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .msg .meta { font-size: 11px; color: var(--muted2); margin-top: 5px; padding: 0 4px; }
+  .composer {
+    display: flex; gap: 10px; padding-top: 14px; border-top: 1px solid var(--hairline);
+  }
   textarea {
-    flex: 1; resize: none; background: var(--panel); color: var(--fg);
-    border: 1px solid var(--line); border-radius: 9px; padding: 9px 12px;
-    font: inherit; min-height: 40px; max-height: 140px;
+    flex: 1; resize: none; background: var(--canvas); color: var(--ink);
+    border: 1px solid var(--hairline); border-radius: var(--r-lg); padding: 11px 15px;
+    font: inherit; min-height: 44px; max-height: 160px; letter-spacing: -0.2px;
   }
-  button.send {
-    background: var(--accent); color: #0c1118; border: none; border-radius: 9px;
-    padding: 0 18px; font-weight: 600; cursor: pointer;
+  textarea:focus { outline: none; border-color: var(--blue); }
+  .composer .btn-primary { padding: 0 22px; }
+  .hint { font-size: 12px; color: var(--muted2); margin: 6px 4px 0; }
+
+  /* ── Brief / Activity mono ── */
+  pre.mono {
+    white-space: pre-wrap; background: var(--pearl); border: 1px solid var(--hairline);
+    border-radius: var(--r-lg); padding: 18px 20px;
+    font: 13px/1.6 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: 0;
   }
-  button.send:disabled { opacity: .5; cursor: default; }
-  pre.brief, pre.traces {
-    white-space: pre-wrap; background: var(--panel); border: 1px solid var(--line);
-    border-radius: 9px; padding: 14px; font: 13px/1.6 ui-monospace, Menlo, monospace;
+
+  /* ── Proposal / Approval cards ── */
+  .pcard { margin-bottom: 14px; }
+  .pcard .hd { display: flex; align-items: baseline; gap: 9px; margin-bottom: 4px; }
+  .pcard .ttl { font-size: 16px; font-weight: 600; letter-spacing: -0.3px; }
+  .pcard .meta { font-size: 12px; color: var(--muted); }
+  .pcard .rationale { font-size: 13px; color: var(--muted); margin: 4px 0 12px; }
+  .chip {
+    font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: var(--pill);
+    background: var(--red-soft); color: var(--red); letter-spacing: 0;
   }
-  .reload {
-    background: none; border: 1px solid var(--line); color: var(--dim);
-    padding: 4px 10px; border-radius: 7px; cursor: pointer; margin-bottom: 12px;
+  .chip.low { background: var(--green-soft); color: var(--green); }
+  .chip.mid { background: var(--amber-soft); color: var(--amber); }
+  .step { padding: 9px 0; border-top: 1px solid var(--divider); }
+  .step label { display: flex; gap: 9px; align-items: flex-start; cursor: pointer; }
+  .step input { margin-top: 3px; accent-color: var(--blue); }
+  .step .si { font-weight: 600; font-size: 14px; }
+  .step .sd { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .step .cite { font-size: 12px; color: var(--muted2); margin-top: 3px; }
+  .acts { display: flex; gap: 9px; margin-top: 14px; }
+  .approval-pre {
+    white-space: pre-wrap; background: var(--pearl); border: 1px solid var(--hairline);
+    border-radius: var(--r-md); padding: 10px 12px; margin: 8px 0;
+    font: 12px/1.5 ui-monospace, Menlo, monospace; letter-spacing: 0;
   }
-  .empty { color: var(--dim); padding: 20px 0; }
-  .approval {
-    background: var(--panel); border: 1px solid var(--line);
-    border-radius: 9px; padding: 12px 14px; margin-bottom: 12px;
+  .empty { color: var(--muted2); padding: 28px 0; text-align: center; font-size: 14px; }
+  .trow {
+    display: flex; gap: 12px; align-items: center; padding: 11px 0;
+    border-bottom: 1px solid var(--divider); font-size: 13px;
   }
-  .approval .hd { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-  .approval .at { font-weight: 600; }
-  .approval .risk {
-    font-size: 11px; padding: 1px 7px; border-radius: 6px;
-    background: #3a2c2c; color: #e8a0a0;
-  }
-  .approval .risk.low { background: #2c3a2e; color: #9fd6a6; }
-  .approval .tgt { font-size: 12px; color: var(--dim); }
-  .approval pre {
-    white-space: pre-wrap; font: 12px/1.5 ui-monospace, Menlo, monospace;
-    background: var(--bg); border: 1px solid var(--line); border-radius: 7px;
-    padding: 9px 11px; margin: 6px 0;
-  }
-  .approval .acts { display: flex; gap: 8px; }
-  .approval button {
-    border: 1px solid var(--line); border-radius: 7px; padding: 5px 14px;
-    cursor: pointer; font: inherit; font-size: 13px;
-  }
-  .approval button.yes { background: #2c3a2e; color: #9fd6a6; }
-  .approval button.no { background: #3a2c2c; color: #e8a0a0; }
+  .trow .tk { font-variant-numeric: tabular-nums; color: var(--muted); min-width: 80px; }
+  .trow .tt { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .trow .tf { font-size: 11px; color: var(--muted2); }
 </style>
 </head>
 <body>
-<header>
-  <h1>☀️ Edith</h1>
-  <span class="status" id="status">connecting…</span>
-  <nav>
-    <button data-tab="chat" class="on">💬 Chat</button>
-    <button data-tab="brief">☀️ Brief</button>
-    <button data-tab="proposals">📋 Proposals</button>
-    <button data-tab="approvals">✋ Approvals</button>
-    <button data-tab="traces">📊 Traces</button>
-  </nav>
-</header>
+<div class="app">
+  <aside>
+    <div class="brand"><span class="dot"></span> Edith</div>
+    <nav id="nav">
+      <a data-view="home" class="on"><span class="ic">🏠</span> 홈</a>
+      <a data-view="chat"><span class="ic">💬</span> 대화</a>
+      <a data-view="brief"><span class="ic">☀️</span> 브리핑</a>
+      <a data-view="proposals"><span class="ic">📋</span> 제안 <span class="badge" id="b-prop"></span></a>
+      <a data-view="approvals"><span class="ic">✅</span> 승인 <span class="badge" id="b-appr"></span></a>
+      <a data-view="activity"><span class="ic">📈</span> 활동</a>
+    </nav>
+    <div class="usage">
+      <div class="lbl">토큰 사용 (최근)</div>
+      <div class="big" id="u-tok">—</div>
+      <div class="sub" id="u-runs">집계 중…</div>
+    </div>
+  </aside>
 
-<main>
-  <section class="tab on" id="tab-chat">
-    <div id="log"></div>
-  </section>
-  <section class="tab" id="tab-brief">
-    <button class="reload" onclick="loadBrief()">↻ 새로고침</button>
-    <pre class="brief" id="brief">불러오는 중…</pre>
-  </section>
-  <section class="tab" id="tab-proposals">
-    <button class="reload" onclick="loadProposals()">↻ 새로고침</button>
-    <div id="proposals"></div>
-  </section>
-  <section class="tab" id="tab-approvals">
-    <button class="reload" onclick="loadApprovals()">↻ 새로고침</button>
-    <div id="approvals"></div>
-  </section>
-  <section class="tab" id="tab-traces">
-    <button class="reload" onclick="loadTraces()">↻ 새로고침</button>
-    <pre class="traces" id="traces">불러오는 중…</pre>
-  </section>
-</main>
+  <div class="content">
+    <div class="topbar">
+      <span class="hi" id="greet">안녕하세요</span>
+      <span class="date" id="topdate"></span>
+      <span class="status"><span class="led" id="led"></span><span id="status">연결 중…</span></span>
+    </div>
+    <main>
+      <!-- HOME -->
+      <section class="view on" id="view-home">
+        <div class="hero">
+          <h2 id="home-h">좋은 하루예요 ☀️</h2>
+          <p id="home-sub">오늘 요약을 불러오는 중…</p>
+        </div>
+        <div class="grid4" id="stats"></div>
+        <div class="section-t">Top 3</div>
+        <div class="card" id="top3"><div class="muted">불러오는 중…</div></div>
+        <div class="section-t">오늘 일정</div>
+        <div class="card" id="agenda"><div class="muted">불러오는 중…</div></div>
+      </section>
 
-<footer>
-  <div class="composer">
-    <textarea id="input" placeholder="Edith에게 물어보세요 — Enter 전송, Shift+Enter 줄바꿈"></textarea>
-    <button class="send" id="send">전송</button>
+      <!-- CHAT -->
+      <section class="view" id="view-chat">
+        <div id="log"></div>
+        <div>
+          <div class="composer">
+            <textarea id="input" placeholder="Edith에게 물어보세요 — 예: 비씨카드 결과 왔어?"></textarea>
+            <button class="btn btn-primary" id="send">전송</button>
+          </div>
+          <div class="hint">Enter 전송 · Shift+Enter 줄바꿈 · 메일 검색·일정·제안 모두 자연어로</div>
+        </div>
+      </section>
+
+      <!-- BRIEF -->
+      <section class="view" id="view-brief">
+        <button class="btn btn-ghost reload" onclick="loadBrief()">↻ 새로고침</button>
+        <pre class="mono" id="brief">불러오는 중…</pre>
+      </section>
+
+      <!-- PROPOSALS -->
+      <section class="view" id="view-proposals">
+        <button class="btn btn-ghost reload" onclick="loadProposals()">↻ 새로고침</button>
+        <div id="proposals"></div>
+      </section>
+
+      <!-- APPROVALS -->
+      <section class="view" id="view-approvals">
+        <button class="btn btn-ghost reload" onclick="loadApprovals()">↻ 새로고침</button>
+        <div id="approvals"></div>
+      </section>
+
+      <!-- ACTIVITY -->
+      <section class="view" id="view-activity">
+        <button class="btn btn-ghost reload" onclick="loadTraces()">↻ 새로고침</button>
+        <div class="card" id="traces"><div class="muted">불러오는 중…</div></div>
+      </section>
+    </main>
   </div>
-</footer>
+</div>
 
 <script>
 const $ = (s) => document.querySelector(s);
-const log = $("#log"), input = $("#input"), sendBtn = $("#send");
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
+// ── nav ──
+let current = "home";
+document.querySelectorAll("#nav a").forEach((a) => {
+  a.onclick = () => switchView(a.dataset.view);
+});
+function switchView(v) {
+  current = v;
+  document.querySelectorAll("#nav a").forEach((x) => x.classList.toggle("on", x.dataset.view === v));
+  document.querySelectorAll(".view").forEach((x) => x.classList.toggle("on", x.id === "view-" + v));
+  if (v === "home") loadSummary();
+  if (v === "brief") loadBrief();
+  if (v === "proposals") loadProposals();
+  if (v === "approvals") loadApprovals();
+  if (v === "activity") loadTraces();
+  if (v === "chat") $("#input").focus();
+}
+
+// ── HOME summary ──
+async function loadSummary() {
+  let d;
+  try { d = await (await fetch("/ui/summary")).json(); }
+  catch (e) { $("#home-sub").textContent = "요약 불러오기 실패: " + e; return; }
+  if (!d.ok) { $("#home-sub").textContent = "요약 오류: " + (d.error || "?"); return; }
+  $("#home-sub").textContent = d.date || "";
+  $("#topdate").textContent = d.date || "";
+  const pr = d.mail_by_priority || {};
+  const prTxt = Object.entries(pr).filter(([, v]) => v).map(([k, v]) => `${k} ${v}`).join(" · ") || "분류 없음";
+  const cards = [
+    { k: "오늘 일정", v: d.events_n, d: d.busy_min ? `${Math.round(d.busy_min / 6) / 10}h` : "없음", view: "brief", accent: false },
+    { k: "안읽음 메일", v: d.unread, d: prTxt, view: "chat", accent: false },
+    { k: "제안 대기", v: d.proposals, d: d.proposals ? "검토 필요" : "없음", view: "proposals", accent: d.proposals > 0 },
+    { k: "승인 대기", v: d.approvals, d: d.approvals ? "실행 대기" : "없음", view: "approvals", accent: d.approvals > 0 },
+  ];
+  $("#stats").innerHTML = cards.map((c) =>
+    `<div class="card stat act" data-go="${c.view}">
+       <div class="k">${esc(c.k)}</div>
+       <div class="v ${c.accent ? "accent" : ""}">${esc(c.v)}</div>
+       <div class="d">${esc(c.d)}</div>
+     </div>`).join("");
+  document.querySelectorAll("#stats .stat").forEach((el) => el.onclick = () => switchView(el.dataset.go));
+  $("#top3").innerHTML = (d.top3 && d.top3.length)
+    ? d.top3.map((t) => `<div class="list-row">${esc(t)}</div>`).join("")
+    : `<div class="muted">오늘 Top 3 없음</div>`;
+  const ag = d.events || [];
+  $("#agenda").innerHTML = ag.length
+    ? ag.map((e) => { const m = String(e).match(/^(\d{2}:\d{2}-\d{2}:\d{2})\s*(.*)$/);
+        return `<div class="list-row">${m ? `<span class="badge-time">${esc(m[1])}</span><span>${esc(m[2])}</span>` : esc(e)}</div>`; }).join("")
+    : `<div class="muted">오늘 일정 없음</div>`;
+  // badges
+  setBadge("#b-prop", d.proposals);
+  setBadge("#b-appr", d.approvals);
+}
+function setBadge(sel, n) {
+  const el = $(sel); el.textContent = n || ""; el.classList.toggle("show", !!n);
+}
+
+// ── CHAT ──
+const log = $("#log"), input = $("#input"), sendBtn = $("#send");
 function addMsg(who, text, meta) {
   const div = document.createElement("div");
   div.className = "msg" + (who === "나" ? " me" : "");
-  div.innerHTML =
-    `<div class="who"></div><div class="body"></div>` +
-    (meta ? `<div class="meta"></div>` : "");
-  div.querySelector(".who").textContent = who;
+  div.innerHTML = `<div class="who">${esc(who)}</div><div class="body"></div>` + (meta ? `<div class="meta"></div>` : "");
   div.querySelector(".body").textContent = text;
   if (meta) div.querySelector(".meta").textContent = meta;
   log.appendChild(div);
   div.scrollIntoView({ behavior: "smooth", block: "end" });
   return div;
 }
-
 async function send() {
   const q = input.value.trim();
   if (!q) return;
-  input.value = "";
-  addMsg("나", q);
+  input.value = ""; addMsg("나", q);
   sendBtn.disabled = true;
   const pending = addMsg("Edith", "…");
   try {
-    const r = await fetch("/ask", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ q }),
-    });
+    const r = await fetch("/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ q }) });
     const d = await r.json();
-    pending.querySelector(".body").textContent =
-      d.ok ? (d.answer || "(응답 없음)") : ("오류: " + (d.error || r.status));
-    if (d.ok)
-      pending.querySelector(".body").insertAdjacentHTML(
-        "afterend",
-        `<div class="meta">steps ${d.steps} · ${d.tokens} tok · ${d.trace_id || ""}</div>`
-      );
-  } catch (e) {
-    pending.querySelector(".body").textContent = "네트워크 오류: " + e;
-  } finally {
-    sendBtn.disabled = false;
-    input.focus();
-  }
+    pending.querySelector(".body").textContent = d.ok ? (d.answer || "(응답 없음)") : ("오류: " + (d.error || r.status));
+    if (d.ok) pending.querySelector(".body").insertAdjacentHTML("afterend",
+      `<div class="meta">steps ${d.steps} · ${d.tokens} tok · ${esc(d.trace_id || "")}</div>`);
+    loadUsage();
+  } catch (e) { pending.querySelector(".body").textContent = "네트워크 오류: " + e; }
+  finally { sendBtn.disabled = false; input.focus(); }
+}
+sendBtn.onclick = send;
+input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } });
+
+// ── BRIEF ──
+async function loadBrief() {
+  try { const d = await (await fetch("/ui/brief")).json(); $("#brief").textContent = d.text || "(브리프 없음)"; }
+  catch (e) { $("#brief").textContent = "불러오기 실패: " + e; }
 }
 
-sendBtn.onclick = send;
-input.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
-});
-
-document.querySelectorAll("nav button").forEach((b) => {
-  b.onclick = () => {
-    document.querySelectorAll("nav button").forEach((x) => x.classList.remove("on"));
-    document.querySelectorAll(".tab").forEach((x) => x.classList.remove("on"));
-    b.classList.add("on");
-    $("#tab-" + b.dataset.tab).classList.add("on");
-    if (b.dataset.tab === "brief") loadBrief();
-    if (b.dataset.tab === "traces") loadTraces();
-    if (b.dataset.tab === "approvals") loadApprovals();
-    if (b.dataset.tab === "proposals") loadProposals();
-  };
-});
-
+// ── PROPOSALS ──
+function riskChip(s) { return s >= 6 ? "chip" : s >= 4 ? "chip mid" : "chip low"; }
 async function loadProposals() {
-  const el = $("#proposals");
-  el.innerHTML = "";
+  const el = $("#proposals"); el.innerHTML = "";
   let d;
-  try {
-    d = await (await fetch("/ui/proposals")).json();
-  } catch (e) { el.innerHTML = `<div class="empty">불러오기 실패: ${e}</div>`; return; }
-  if (!d.proposals || !d.proposals.length) {
-    el.innerHTML = `<div class="empty">대기 중인 제안 없음</div>`;
-    return;
-  }
+  try { d = await (await fetch("/ui/proposals")).json(); }
+  catch (e) { el.innerHTML = `<div class="empty">불러오기 실패: ${esc(e)}</div>`; return; }
+  if (!d.proposals || !d.proposals.length) { el.innerHTML = `<div class="empty">대기 중인 제안이 없습니다</div>`; return; }
   for (const p of d.proposals) {
-    const card = document.createElement("div");
-    card.className = "approval";
+    const card = document.createElement("div"); card.className = "card pcard";
     const steps = p.steps.map((s) => {
-      const cite = s.support_refs && s.support_refs.length
-        ? s.support_refs.join(", ")
-        : "[추론 — 근거 없음]";
-      const ext = s.action_type ? ` · ${s.action_type}` : "";
-      return `<label style="display:block;margin:4px 0;">` +
-        `<input type="checkbox" data-idx="${s.idx}" checked> ` +
-        `<b>${s.idx}. ${s.intent}</b>${ext} <span class="${s.risk_score>=6?'risk':'risk low'}">risk ${s.risk_score}</span>` +
-        `<div class="tgt" style="margin-left:20px;">${s.explanation||""}` +
-        (s.expected_outcome?` → ${s.expected_outcome}`:"") +
-        `<br>근거: ${cite}</div></label>`;
+      const cite = (s.support_refs && s.support_refs.length) ? s.support_refs.join(", ") : "[추론 — 근거 없음]";
+      const ext = s.action_type ? ` · ${esc(s.action_type)}` : "";
+      return `<div class="step"><label><input type="checkbox" data-idx="${s.idx}" checked>
+        <span><span class="si">${s.idx}. ${esc(s.intent)}</span>${ext}
+        <span class="${riskChip(s.risk_score)}">risk ${s.risk_score}</span>
+        <div class="sd">${esc(s.explanation || "")}${s.expected_outcome ? " → " + esc(s.expected_outcome) : ""}</div>
+        <div class="cite">근거: ${esc(cite)}</div></span></label></div>`;
     }).join("");
-    card.innerHTML =
-      `<div class="hd"><span class="at"></span>` +
-      `<span class="tgt"></span></div><div class="rationale tgt"></div>` +
-      `<div class="steps">${steps}</div>` +
-      `<div class="acts" style="margin-top:10px;">` +
-      `<button class="yes">선택 승인</button><button class="no">거절</button></div>`;
-    card.querySelector(".at").textContent = `📋 ${p.title}`;
-    card.querySelector(".tgt").textContent = `scope ${p.scope} · ${p.steps.length} step`;
-    card.querySelector(".rationale").textContent = p.rationale ? `근거: ${p.rationale}` : "";
-    card.querySelector(".yes").onclick = () => {
+    card.innerHTML = `<div class="hd"><span class="ttl">📋 ${esc(p.title)}</span>
+      <span class="meta">scope ${esc(p.scope)} · ${p.steps.length} step</span></div>
+      ${p.rationale ? `<div class="rationale">${esc(p.rationale)}</div>` : ""}
+      <div>${steps}</div>
+      <div class="acts"><button class="btn btn-primary">선택 승인</button>
+      <button class="btn btn-ghost">거절</button></div>`;
+    card.querySelector(".btn-primary").onclick = () => {
       const idxs = [...card.querySelectorAll("input:checked")].map((c) => +c.dataset.idx);
       decideProposal(p.id, "accept", idxs);
     };
-    card.querySelector(".no").onclick = () => decideProposal(p.id, "reject");
+    card.querySelector(".btn-ghost").onclick = () => decideProposal(p.id, "reject");
     el.appendChild(card);
   }
 }
-
 async function decideProposal(id, decision, accepted_steps) {
   try {
     const body = { id, decision };
     if (accepted_steps) body.accepted_steps = accepted_steps;
-    const r = await fetch("/ui/proposals/decide", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const d = await r.json();
-    if (!d.ok) alert("실패: " + (d.error || r.status));
-    else if (decision === "accept")
-      alert(`✓ ${(d.queued_approvals||[]).length}개 step이 승인 큐로 — Approvals 탭에서 실행하세요.`);
+    const d = await (await fetch("/ui/proposals/decide", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).json();
+    if (!d.ok) alert("실패: " + (d.error || "?"));
+    else if (decision === "accept") alert(`✓ ${(d.queued_approvals || []).length}개 step이 승인 큐로 — 승인 탭에서 실행하세요.`);
   } catch (e) { alert("네트워크 오류: " + e); }
-  loadProposals();
+  loadProposals(); loadSummary();
 }
 
-async function loadBrief() {
-  const el = $("#brief");
+// ── APPROVALS ──
+async function loadApprovals() {
+  const el = $("#approvals"); el.innerHTML = "";
+  let d;
+  try { d = await (await fetch("/ui/approvals")).json(); }
+  catch (e) { el.innerHTML = `<div class="empty">불러오기 실패: ${esc(e)}</div>`; return; }
+  if (!d.approvals || !d.approvals.length) { el.innerHTML = `<div class="empty">대기 중인 승인 요청이 없습니다</div>`; return; }
+  for (const a of d.approvals) {
+    const card = document.createElement("div"); card.className = "card pcard";
+    card.innerHTML = `<div class="hd"><span class="ttl">${esc(a.action_type)}</span>
+      <span class="${riskChip(a.risk_score)}">risk ${a.risk_score}</span>
+      <span class="meta">→ ${esc(a.target_system)} · ${a.reversible ? "가역" : "비가역"} · scope ${esc(a.scope || "-")}</span></div>
+      <div class="approval-pre"></div>
+      <div class="acts"><button class="btn btn-primary">승인 · 실행</button>
+      <button class="btn btn-ghost">거절</button></div>`;
+    card.querySelector(".approval-pre").textContent = a.preview;
+    card.querySelector(".btn-primary").onclick = () => decide(a.id, "yes");
+    card.querySelector(".btn-ghost").onclick = () => decide(a.id, "no");
+    el.appendChild(card);
+  }
+}
+async function decide(id, decision) {
   try {
-    const d = await (await fetch("/ui/brief")).json();
-    el.textContent = d.text || "(브리프 없음)";
-  } catch (e) { el.textContent = "불러오기 실패: " + e; }
+    const d = await (await fetch("/ui/approve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, decision }) })).json();
+    if (!d.ok) alert("실패: " + (d.error || "?"));
+    else if (decision === "yes" && d.execution)
+      alert(d.execution.ok ? "✓ 실행됨 — " + (d.execution.detail || "완료") : "승인됐으나 실행 실패 — " + (d.execution.error || "?"));
+  } catch (e) { alert("네트워크 오류: " + e); }
+  loadApprovals(); loadSummary();
 }
 
+// ── ACTIVITY + usage ──
 async function loadTraces() {
   const el = $("#traces");
   try {
     const d = await (await fetch("/ui/traces")).json();
-    if (!d.traces || !d.traces.length) { el.textContent = "(trace 없음)"; return; }
-    el.textContent = d.traces
-      .map((t) =>
-        `${t.id} · ${t.scope || "-"} · steps ${t.n_steps} blocked ${t.n_blocked} · ` +
-        `${t.cost_tokens}tok · ${t.finalize_reason || "-"}\n   ${t.task || ""}`)
-      .join("\n");
-  } catch (e) { el.textContent = "불러오기 실패: " + e; }
+    if (!d.traces || !d.traces.length) { el.innerHTML = `<div class="muted">활동 기록 없음</div>`; return; }
+    el.innerHTML = d.traces.map((t) =>
+      `<div class="trow"><span class="tk">${t.cost_tokens} tok</span>
+       <span class="tt">${esc(t.task || "(no task)")}</span>
+       <span class="tf">${esc(t.finalize_reason || "-")} · ${t.n_steps}st${t.n_blocked ? " · " + t.n_blocked + "blk" : ""}</span></div>`).join("");
+  } catch (e) { el.innerHTML = `<div class="muted">불러오기 실패: ${esc(e)}</div>`; }
 }
-
-async function loadApprovals() {
-  const el = $("#approvals");
-  el.innerHTML = "";
-  let d;
+async function loadUsage() {
   try {
-    d = await (await fetch("/ui/approvals")).json();
-  } catch (e) { el.innerHTML = `<div class="empty">불러오기 실패: ${e}</div>`; return; }
-  if (!d.approvals || !d.approvals.length) {
-    el.innerHTML = `<div class="empty">대기 중인 승인 요청 없음</div>`;
-    return;
-  }
-  for (const a of d.approvals) {
-    const card = document.createElement("div");
-    card.className = "approval";
-    const riskClass = a.risk_score <= 4 ? "risk low" : "risk";
-    card.innerHTML =
-      `<div class="hd"><span class="at"></span>` +
-      `<span class="${riskClass}">risk ${a.risk_score}</span>` +
-      `<span class="tgt"></span></div><pre></pre>` +
-      `<div class="acts"><button class="yes">승인</button>` +
-      `<button class="no">거절</button></div>`;
-    card.querySelector(".at").textContent = a.action_type;
-    card.querySelector(".tgt").textContent =
-      `→ ${a.target_system} · ${a.reversible ? "가역" : "비가역"}`;
-    card.querySelector("pre").textContent = a.preview;
-    card.querySelector(".yes").onclick = () => decide(a.id, "yes");
-    card.querySelector(".no").onclick = () => decide(a.id, "no");
-    el.appendChild(card);
-  }
+    const d = await (await fetch("/ui/traces")).json();
+    const ts = d.traces || [];
+    const tok = ts.reduce((s, t) => s + (t.cost_tokens || 0), 0);
+    $("#u-tok").textContent = tok.toLocaleString();
+    $("#u-runs").textContent = `${ts.length} runs`;
+  } catch { $("#u-tok").textContent = "—"; }
 }
 
-async function decide(id, decision) {
-  try {
-    const r = await fetch("/ui/approve", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, decision }),
-    });
-    const d = await r.json();
-    if (!d.ok) {
-      alert("실패: " + (d.error || r.status));
-    } else if (decision === "yes" && d.execution) {
-      alert(d.execution.ok
-        ? "✓ 실행됨 — " + (d.execution.detail || "완료")
-        : "승인됐으나 실행 실패 — " + (d.execution.error || "?"));
-    }
-  } catch (e) { alert("네트워크 오류: " + e); }
-  loadApprovals();
-}
-
+// ── boot ──
 (async () => {
   try {
     const h = await (await fetch("/health")).json();
-    $("#status").textContent = h.ok
-      ? `home ${h.edith_home}${h.telegram_configured ? " · telegram" : ""}`
-      : "unhealthy";
-  } catch { $("#status").textContent = "offline"; }
-  input.focus();
+    $("#led").classList.toggle("ok", !!h.ok);
+    $("#status").textContent = h.ok ? (h.telegram_configured ? "텔레그램 연결됨" : "온라인") : "오프라인";
+  } catch { $("#status").textContent = "오프라인"; }
+  loadSummary(); loadUsage();
 })();
 </script>
 </body>

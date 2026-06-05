@@ -183,6 +183,24 @@ def make_app(
 
     app = FastAPI(title="Edith Home Hub Server")
 
+    # 실 Gmail/Calendar 호출이 무거워서(메일 50건 fetch ~수초) brief를 90s 캐시.
+    # /ui/brief·/ui/summary가 공유. 앱 인스턴스별 캐시라 테스트 격리 안전.
+    _brief_cache: dict[str, Any] = {}
+
+    def _cached_brief() -> Any:
+        import time
+
+        from harness.localtime import edith_now
+        from harness.morning import compose_brief
+
+        hit = _brief_cache.get("b")
+        now = time.time()
+        if hit is not None and now - hit[0] < 90:
+            return hit[1]
+        brief = compose_brief(home, now=edith_now())
+        _brief_cache["b"] = (now, brief)
+        return brief
+
     @app.get("/health")
     def health() -> dict[str, Any]:
         return {
@@ -202,9 +220,36 @@ def make_app(
 
     @app.get("/ui/brief")
     def ui_brief() -> dict[str, Any]:
-        """오늘 morning brief 텍스트 (GUI Brief 탭)."""
+        """오늘 morning brief 텍스트 (GUI Brief 탭). 90s 캐시."""
         try:
-            return {"ok": True, "text": _brief_text(home)}
+            return {"ok": True, "text": _cached_brief().render_text()}
+        except Exception as e:  # pragma: no cover
+            return {"ok": False, "error": str(e)}
+
+    @app.get("/ui/summary")
+    def ui_summary() -> dict[str, Any]:
+        """대시보드 홈 카드용 구조화 요약 (일정·메일·digest·헬스·제안·승인 카운트)."""
+        try:
+            from harness.integrations.apple_health import format_for_brief
+
+            b = _cached_brief()
+            props = _proposal_store().list(status="proposed")
+            queue = _approval_queue()
+            queue.expire_old()
+            return {
+                "ok": True,
+                "date": b.today_str,
+                "events_n": b.today.get("n_events", 0),
+                "events": [e.get("summary", "") for e in b.today.get("events", [])[:4]],
+                "busy_min": b.today.get("total_busy_minutes", 0),
+                "unread": b.mail_summary.get("n_unread", 0),
+                "mail_by_priority": b.mail_summary.get("by_priority", {}),
+                "digest_n": b.digest.get("n", 0),
+                "health": format_for_brief(b.health) if b.health else "",
+                "top3": b.top3,
+                "proposals": len(props),
+                "approvals": len(queue.list(status="pending")),
+            }
         except Exception as e:  # pragma: no cover
             return {"ok": False, "error": str(e)}
 
