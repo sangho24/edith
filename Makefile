@@ -1,4 +1,4 @@
-.PHONY: install test run serve serve-demo seed-demo demo lint fmt typecheck eval check lock help
+.PHONY: install test run serve serve-demo seed-demo demo _free-port lint fmt typecheck eval check lock help
 
 help:
 	@echo "make install     # uv venv + 의존성 설치 (editable)"
@@ -26,7 +26,13 @@ run:
 	@if [ -z "$(TASK)" ]; then echo "usage: make run TASK=\"task text\""; exit 1; fi
 	uv run harness run "$(TASK)"
 
-serve:
+# 8765를 점유 중인 이전 서버가 있으면 종료(반복 실행 시 'address already in use' 방지).
+_free-port:
+	@PID=$$(lsof -nP -tiTCP:8765 -sTCP:LISTEN 2>/dev/null); \
+		if [ -n "$$PID" ]; then echo "포트 8765 사용 중(PID $$PID) → 종료"; \
+		kill $$PID 2>/dev/null || true; sleep 1; fi
+
+serve: _free-port
 	@echo "Edith Web GUI → http://127.0.0.1:8765  (Ctrl+C 종료)"
 	uv run uvicorn harness.server:app --host 127.0.0.1 --port 8765
 
@@ -105,7 +111,7 @@ demo:
 
 # 시드/서버 모두 Edith 시간대(기본 KST, EDITH_TZ_OFFSET_HOURS로 override) 기준 '오늘'.
 # --force/--fresh로 매번 오늘 날짜로 새로 시드 → 날짜 드리프트로 일정·헬스가 빠지지 않게.
-serve-demo:
+serve-demo: _free-port
 	uv run harness seed-demo --force
 	@echo "Edith Web GUI (demo seed) → http://127.0.0.1:8765  (Ctrl+C 종료)"
 	EDITH_CALENDAR_FIXTURE="$(CURDIR)/raw/calendar/events.json" \
