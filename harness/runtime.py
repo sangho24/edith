@@ -34,19 +34,28 @@ def run(
     budget: Budget | None = None,
     registry: Registry | None = None,
     llm: AnthropicLLM | GeminiLLM | GrokLLM | GroqCloudLLM | MockLLM | None = None,
+    history: list[dict[str, Any]] | None = None,
+    system_suffix: str = "",
 ) -> Trace:
-    """한 task을 LLM + tools로 실행. 모든 step이 trace에 기록됨."""
+    """한 task을 LLM + tools로 실행. 모든 step이 trace에 기록됨.
+
+    history: 직전 대화 턴([{role:'user'|'assistant', content:str}, ...]) — 멀티턴 맥락.
+    system_suffix: system prompt 뒤에 덧붙일 모드별 지침(예: 대화 모드).
+    """
     budget = budget or Budget()
     registry = registry or build_default_registry()
     llm = llm or get_llm()
 
     identity = _load_text(edith_home / "identity.md")
     schema = _load_text(edith_home / "CLAUDE.md")
-    system_prompt = f"{identity}\n\n---\n\n{schema}"
+    system_prompt = f"{identity}\n\n---\n\n{schema}{system_suffix}"
 
     trace = Trace.start(task, scope=scope)
     ctx = Context(edith_home=edith_home, scope=scope, trace=trace)
-    messages: list[dict[str, Any]] = [{"role": "user", "content": task}]
+    messages: list[dict[str, Any]] = [
+        *(history or []),
+        {"role": "user", "content": task},
+    ]
     tools_spec = registry.all_specs()
     started = time.time()
 

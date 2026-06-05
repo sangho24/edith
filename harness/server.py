@@ -125,6 +125,32 @@ except ImportError as e:  # pragma: no cover
 
 _WEBUI_INDEX = Path(__file__).resolve().parent / "webui" / "index.html"
 
+# 대화(/ask) 모드에서만 붙이는 system 지침 — 맥락 이어받기 + 능동적 도구 사용.
+_CHAT_SUFFIX = (
+    "\n\n---\n\n[대화 모드] 지금은 사용자와 실시간 대화 중입니다.\n"
+    "- 직전 대화 맥락을 반드시 이어받으세요. '해'·'그거'·'응'·'ㅇㅋ'는 바로 앞에서 "
+    "제안·언급한 것을 실행하라는 뜻입니다.\n"
+    "- 정보가 필요하면 사용자에게 키워드를 되묻기 전에 먼저 mail_search·mail_triage·"
+    "calendar_today·memory_recall 등 도구로 직접 찾아 끝까지 답하세요. 도구로 해결 "
+    "가능한 것은 되묻지 말고 실행해 결과로 답합니다.\n"
+    "- 외부 발송 등 승인이 필요한 행동만 request_approval을 거칩니다. 읽기·검색·요약은 "
+    "바로 수행하세요."
+)
+
+
+def _sanitize_history(raw: Any) -> list[dict[str, str]]:
+    """클라이언트가 보낸 대화 history를 안전한 형태로 정리(최근 8턴, role/content 검증)."""
+    if not isinstance(raw, list):
+        return []
+    out: list[dict[str, str]] = []
+    for m in raw[-8:]:
+        if not isinstance(m, dict):
+            continue
+        role, content = m.get("role"), m.get("content")
+        if role in ("user", "assistant") and isinstance(content, str) and content.strip():
+            out.append({"role": role, "content": content})
+    return out
+
 
 def _brief_text(home: Path) -> str:
     """morning brief 텍스트 — Web GUI와 Telegram /brief 명령이 공유.
@@ -455,15 +481,17 @@ def make_app(
         if not question.strip():
             raise HTTPException(status_code=400, detail="q required")
 
-        if runner is None:
-            from harness.runtime import run as runtime_run
-
-            run_fn = runtime_run
-        else:
-            run_fn = runner
+        history = _sanitize_history(payload.get("history"))
 
         try:
-            trace = run_fn(question, edith_home=home)
+            if runner is None:
+                from harness.runtime import run as runtime_run
+
+                trace = runtime_run(
+                    question, edith_home=home, history=history, system_suffix=_CHAT_SUFFIX
+                )
+            else:
+                trace = runner(question, edith_home=home)
             return JSONResponse(
                 {
                     "ok": True,
