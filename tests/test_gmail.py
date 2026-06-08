@@ -166,6 +166,7 @@ def _make_fake_service(messages_to_return: list[dict[str, Any]]) -> Any:
 
     def get_side_effect(userId: str, id: str, **kwargs: Any) -> Any:
         m = MagicMock()
+        m.requested_id = id
         m.execute.return_value = by_id[id]
         return m
 
@@ -267,13 +268,92 @@ def test_gmail_batch_partial_failure_drops_failed_message(
     ]
     service = _make_fake_service(fake_msgs)
     service.new_batch_http_request.side_effect = lambda: PartialFailBatch()
-    src = GmailSource(service=service)
+    sleep_calls: list[float] = []
+    src = GmailSource(service=service, sleep_fn=sleep_calls.append)
 
     with caplog.at_level(logging.WARNING, logger="harness.integrations.gmail"):
         out = src.list_unread(max_results=10)
 
     assert [m.id for m in out] == ["m1", "m3"]
     assert "Gmail batch dropped 1/3 messages" in caplog.text
+    assert sleep_calls == [0.5, 1.0, 2.0]
+
+
+class _DroppingBatch:
+    """batch mock — 라운드별로 지정된 메시지만 콜백 exception 으로 드롭."""
+
+    def __init__(
+        self,
+        drop_ids: set[str],
+        requested_batches: list[list[str]],
+    ) -> None:
+        self._drop_ids = drop_ids
+        self._requested_batches = requested_batches
+        self._items: list[Any] = []
+
+    def add(self, req: Any, callback: Any, request_id: str) -> None:
+        self._items.append((request_id, req, callback))
+
+    def execute(self) -> None:
+        self._requested_batches.append([req.requested_id for _, req, _ in self._items])
+        for rid, req, cb in self._items:
+            if req.requested_id in self._drop_ids:
+                cb(rid, None, RuntimeError("rate limited"))
+            else:
+                cb(rid, req.execute(), None)
+
+
+def test_gmail_batch_retries_dropped_messages_and_preserves_order() -> None:
+    fake_msgs = [
+        _fake_gmail_message(msg_id="m1", subject="first"),
+        _fake_gmail_message(msg_id="m2", subject="second"),
+        _fake_gmail_message(msg_id="m3", subject="third"),
+        _fake_gmail_message(msg_id="m4", subject="fourth"),
+    ]
+    service = _make_fake_service(fake_msgs)
+    requested_batches: list[list[str]] = []
+    round_drops = [{"m2", "m4"}, set()]
+
+    def new_batch() -> _DroppingBatch:
+        return _DroppingBatch(round_drops.pop(0), requested_batches)
+
+    service.new_batch_http_request.side_effect = new_batch
+    sleep_calls: list[float] = []
+    src = GmailSource(service=service, sleep_fn=sleep_calls.append)
+
+    out = src.list_unread(max_results=10)
+
+    assert [m.id for m in out] == ["m1", "m2", "m3", "m4"]
+    assert requested_batches == [["m1", "m2", "m3", "m4"], ["m2", "m4"]]
+    assert sleep_calls == [0.5]
+
+
+def test_gmail_batch_warns_after_retry_exhaustion_and_returns_successes(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    fake_msgs = [
+        _fake_gmail_message(msg_id="m1", subject="first"),
+        _fake_gmail_message(msg_id="m2", subject="permanent drop"),
+        _fake_gmail_message(msg_id="m3", subject="third"),
+    ]
+    service = _make_fake_service(fake_msgs)
+    requested_batches: list[list[str]] = []
+    round_drops = [{"m2"}, {"m2"}, {"m2"}, {"m2"}]
+
+    def new_batch() -> _DroppingBatch:
+        return _DroppingBatch(round_drops.pop(0), requested_batches)
+
+    service.new_batch_http_request.side_effect = new_batch
+    sleep_calls: list[float] = []
+    src = GmailSource(service=service, sleep_fn=sleep_calls.append)
+
+    with caplog.at_level(logging.WARNING, logger="harness.integrations.gmail"):
+        out = src.list_unread(max_results=10)
+
+    assert [m.id for m in out] == ["m1", "m3"]
+    assert requested_batches == [["m1", "m2", "m3"], ["m2"], ["m2"], ["m2"]]
+    assert sleep_calls == [0.5, 1.0, 2.0]
+    assert "Gmail batch dropped 1/3 messages: ['m2']" in caplog.text
 
 
 # ── get_mail_source ─────────────────────────────────────────────────────

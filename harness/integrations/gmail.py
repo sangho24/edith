@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import logging
 import os
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -28,6 +30,8 @@ from harness.integrations.google_auth import GOOGLE_SCOPES, load_google_credenti
 # 읽기 + 발송만, modify(삭제·수정)는 요청하지 않는다. 별도 credential 로딩 경로를 두지 않음.
 GMAIL_SCOPES = GOOGLE_SCOPES
 _LOG = logging.getLogger(__name__)
+GMAIL_BATCH_RETRY_ATTEMPTS = 3
+GMAIL_BATCH_BACKOFF_SECONDS = 0.5
 
 
 @dataclass(frozen=True)
@@ -86,7 +90,9 @@ class GmailSource:
         token_file: Path | None = None,
         scopes: list[str] | None = None,
         service: Any = None,
+        sleep_fn: Callable[[float], None] | None = None,
     ) -> None:
+        self._sleep_fn = sleep_fn or time.sleep
         if service is not None:
             # 테스트 시 미리 만든 service 주입
             self._service = service
@@ -134,34 +140,55 @@ class GmailSource:
         """
         if not msg_ids:
             return []
-        out: dict[str, MailMessage] = {}
-        dropped: list[str] = []
+        out: dict[int, MailMessage] = {}
+        pending = list(enumerate(msg_ids))
 
-        def _cb(request_id: str, response: Any, exception: Any) -> None:
-            if exception is None and response is not None:
-                out[request_id] = self._parse(response)
-            else:
-                dropped.append(request_id)
+        def _fetch_once(items: list[tuple[int, str]]) -> list[tuple[int, str]]:
+            dropped: list[tuple[int, str]] = []
 
-        batch = self._service.new_batch_http_request()
-        for i, mid in enumerate(msg_ids):
-            batch.add(
-                self._service.users().messages().get(
-                    userId="me", id=mid, format="metadata",
-                    metadataHeaders=["From", "Subject", "Date"],
-                ),
-                callback=_cb,
-                request_id=str(i),
-            )
-        batch.execute()
-        if dropped:
+            def _cb(request_id: str, response: Any, exception: Any) -> None:
+                idx = int(request_id)
+                if exception is not None or response is None:
+                    dropped.append((idx, msg_ids[idx]))
+                    return
+                try:
+                    out[idx] = self._parse(response)
+                except Exception:
+                    _LOG.exception("Gmail batch failed to parse message %s", msg_ids[idx])
+                    dropped.append((idx, msg_ids[idx]))
+
+            batch = self._service.new_batch_http_request()
+            for idx, mid in items:
+                batch.add(
+                    self._service.users().messages().get(
+                        userId="me", id=mid, format="metadata",
+                        metadataHeaders=["From", "Subject", "Date"],
+                    ),
+                    callback=_cb,
+                    request_id=str(idx),
+                )
+            try:
+                batch.execute()
+            except Exception:
+                _LOG.exception("Gmail batch request failed for %d messages", len(items))
+                return items
+            return dropped
+
+        pending = _fetch_once(pending)
+        for retry_num in range(1, GMAIL_BATCH_RETRY_ATTEMPTS + 1):
+            if not pending:
+                break
+            self._sleep_fn(GMAIL_BATCH_BACKOFF_SECONDS * (2 ** (retry_num - 1)))
+            pending = _fetch_once(pending)
+
+        if pending:
             _LOG.warning(
                 "Gmail batch dropped %d/%d messages: %s",
-                len(dropped),
+                len(pending),
                 len(msg_ids),
-                dropped,
+                [mid for _, mid in pending],
             )
-        return [out[str(i)] for i in range(len(msg_ids)) if str(i) in out]
+        return [out[i] for i in range(len(msg_ids)) if i in out]
 
     def get_thread(self, thread_id: str) -> list[MailMessage]:
         resp = self._service.users().threads().get(userId="me", id=thread_id).execute()
