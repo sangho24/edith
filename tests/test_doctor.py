@@ -24,6 +24,10 @@ def test_run_diagnostics_reports_missing_items(
     assert _check(result, "Google OAuth 토큰").ok is False
     assert _check(result, "EDITH_MAIL_BACKEND").ok is False
     assert _check(result, "EDITH_CALENDAR_BACKEND").ok is False
+    assert _check(result, "EDITH_NOTIFY_EMAIL(선택)").ok is True
+    assert _check(result, "EDITH_NOTIFY_EMAIL(선택)").detail == "미설정"
+    assert _check(result, "EDITH_DS_DIGEST_URL(선택)").ok is True
+    assert _check(result, "EDITH_DS_DIGEST_URL(선택)").detail == "미설정"
     assert _check(result, "필수 디렉토리").ok is False
     assert "raw" in _check(result, "필수 디렉토리").detail
 
@@ -64,6 +68,22 @@ def test_run_diagnostics_checks_provider_key_branch(
     assert _check(with_key, "EDITH_MAIL_BACKEND").ok is True
     assert _check(with_key, "EDITH_CALENDAR_BACKEND").ok is True
     assert _check(with_key, "필수 디렉토리").ok is True
+
+
+def test_run_diagnostics_reports_optional_notification_and_digest_env(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("EDITH_HOME", str(tmp_path))
+    (tmp_path / ".env").write_text(
+        "EDITH_NOTIFY_EMAIL=me@example.com\n"
+        "EDITH_DS_DIGEST_URL=https://sangho24.github.io/ds-digest/latest.json\n",
+        encoding="utf-8",
+    )
+
+    result = run_diagnostics(tmp_path, env={})
+
+    assert _check(result, "EDITH_NOTIFY_EMAIL(선택)").detail == "설정됨"
+    assert _check(result, "EDITH_DS_DIGEST_URL(선택)").detail == "설정됨"
 
 
 def test_check_llm_unknown_provider_fails_closed(tmp_path: Path, monkeypatch) -> None:

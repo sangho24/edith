@@ -249,7 +249,7 @@ def mail(fixture: str | None, limit: int) -> None:
 @click.option(
     "--push",
     default=None,
-    type=click.Choice(["kakao"]),
+    type=click.Choice(["kakao", "email", "osnotify"]),
     help="요약 brief를 push 채널로 전송",
 )
 def brief(push: str | None) -> None:
@@ -274,6 +274,40 @@ def brief(push: str | None) -> None:
             sys.exit(1)
         click.echo(text)
         click.echo(f"✓ Kakao push: {res}")
+        return
+
+    if push == "email":
+        from harness.integrations.channel import EmailChannel
+
+        text = b.render_text()
+        try:
+            res = EmailChannel().send("self", text)
+        except RuntimeError as e:
+            click.echo(f"✗ Email push 실패: {e}", err=True)
+            click.echo(
+                "  설정 안내: .env에 EDITH_NOTIFY_EMAIL=본인_주소 를 추가하고 "
+                "`harness oauth google`로 Gmail 토큰을 준비하세요.",
+                err=True,
+            )
+            sys.exit(1)
+        click.echo(text)
+        click.echo(f"✓ Email push: {res}")
+        return
+
+    if push == "osnotify":
+        from harness.integrations.channel import OsNotifyChannel
+
+        text = b.render_text()
+        try:
+            res = OsNotifyChannel().send("self", text)
+        except RuntimeError as e:
+            click.echo(f"✗ OS notification 실패: {e}", err=True)
+            sys.exit(1)
+        if not res.get("ok"):
+            click.echo(f"✗ OS notification 미지원/실패: {res}", err=True)
+            sys.exit(1)
+        click.echo(text)
+        click.echo(f"✓ OS notification: {res}")
         return
 
     click.echo(b.render_text())

@@ -4,12 +4,29 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 from harness.integrations.ds_digest import (
     GitHubPagesDigestSource,
     LocalDigestSource,
+    _httpx_fetch,
     get_digest_source,
 )
+
+
+class _FakeHTTPResponse:
+    def __init__(self, body: str, status: int = 200) -> None:
+        self._body = body
+        self.status = status
+
+    def __enter__(self) -> _FakeHTTPResponse:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return self._body.encode("utf-8")
 
 
 def test_empty_when_no_file(tmp_path: Path) -> None:
@@ -118,6 +135,11 @@ def test_github_pages_corrupt_json_is_graceful() -> None:
     assert src.latest()["n"] == 0
 
 
+def test_github_pages_wrong_shape_json_is_graceful() -> None:
+    src = GitHubPagesDigestSource(url="https://x/latest.json", fetch_fn=lambda _: '["not", "dict"]')
+    assert src.latest() == {"date": None, "items": [], "n": 0}
+
+
 def test_github_pages_passes_configured_url() -> None:
     seen: list[str] = []
 
@@ -140,3 +162,30 @@ def test_get_digest_source_uses_pages_when_url_set(tmp_path: Path, monkeypatch) 
     src = get_digest_source(tmp_path)
     assert isinstance(src, GitHubPagesDigestSource)
     assert src.url == "https://sangho24.github.io/ds-digest/latest.json"
+
+
+def test_default_fetch_uses_urllib_timeout(monkeypatch) -> None:
+    calls: list[tuple[str, int]] = []
+
+    def fake_urlopen(req: Any, timeout: int) -> _FakeHTTPResponse:
+        calls.append((req.full_url, timeout))
+        return _FakeHTTPResponse('{"items": []}')
+
+    import harness.integrations.ds_digest as ds_digest
+
+    monkeypatch.setattr(ds_digest.urllib.request, "urlopen", fake_urlopen)
+
+    assert _httpx_fetch("https://x/latest.json") == '{"items": []}'
+    assert calls == [("https://x/latest.json", 10)]
+
+
+def test_github_pages_default_fetch_bad_status_is_graceful(monkeypatch) -> None:
+    def fake_urlopen(req: Any, timeout: int) -> _FakeHTTPResponse:
+        return _FakeHTTPResponse("server error", status=503)
+
+    import harness.integrations.ds_digest as ds_digest
+
+    monkeypatch.setattr(ds_digest.urllib.request, "urlopen", fake_urlopen)
+
+    result = GitHubPagesDigestSource(url="https://x/latest.json").latest()
+    assert result == {"date": None, "items": [], "n": 0}

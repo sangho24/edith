@@ -4,16 +4,18 @@ Edith의 입출력 표면(Telegram·Kakao·email·...)을 platform-agnostic Chan
 인터페이스를 추출해두면 새 채널은 어댑터 파일 하나로 끝난다.
 
 OpenClaw처럼 14개 채널을 다 만들지 않는다: caller 없는 채널은 유지보수 부채.
-EmailChannel은 실제 호출부가 생길 때 어댑터를 추가한다.
 """
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from harness import policies
+from harness.integrations.gmail import GmailSource
 from harness.integrations.kakao import KakaoClient
+from harness.integrations.os_notify import RunnerFn, send_notification
 from harness.integrations.telegram import TelegramClient
 
 
@@ -54,7 +56,8 @@ class Channel(Protocol):
     - TelegramChannel (실 환경)
     - KakaoChannel (실 환경, outbound-only self memo)
     - MockChannel (테스트)
-    - 추후: EmailChannel — 실제 호출부가 생기면 어댑터 추가
+    - EmailChannel (실 환경, outbound-only self notification)
+    - OsNotifyChannel (macOS 로컬 알림)
     """
 
     name: str
@@ -143,6 +146,65 @@ class KakaoChannel:
         return self._client.send_memo(text)
 
 
+class _EmailSender(Protocol):
+    def send_message(self, to: str, subject: str, body: str) -> dict[str, Any]: ...
+
+
+class EmailChannel:
+    """본인 주소로만 보내는 Gmail 알림 채널.
+
+    recipient는 Kakao self memo처럼 인터페이스 호환용으로만 받고 무시한다. 임의 수신자
+    발송은 approval-gated gmail_send executor 영역이므로 여기서는 EDITH_NOTIFY_EMAIL만 사용.
+    """
+
+    name = "email"
+
+    def __init__(
+        self,
+        self_addr: str | None = None,
+        sender: _EmailSender | None = None,
+    ) -> None:
+        env_addr = os.environ.get("EDITH_NOTIFY_EMAIL", "")
+        self._self_addr = (self_addr if self_addr is not None else env_addr).strip()
+        self._sender = sender
+
+    def parse_incoming(self, payload: dict[str, Any]) -> IncomingMessage | None:
+        return None
+
+    def send(self, recipient: str, text: str) -> dict[str, Any]:
+        _assert_outbound_clean(text)  # R5 PII 게이트
+        if not self._self_addr:
+            raise RuntimeError("EDITH_NOTIFY_EMAIL 없음 — 본인 알림 주소를 .env에 설정하세요.")
+        sender = self._sender or GmailSource()
+        return sender.send_message(to=self._self_addr, subject="☀️ Edith brief", body=text)
+
+
+class OsNotifyChannel:
+    """macOS 로컬 배너 알림 채널.
+
+    recipient는 인터페이스 호환용으로 받지만 무시한다. 외부 발송은 아니지만 모든 Channel.send와
+    동일하게 R5 PII 게이트를 적용한다.
+    """
+
+    name = "osnotify"
+
+    def __init__(
+        self,
+        *,
+        runner: RunnerFn | None = None,
+        platform: str | None = None,
+    ) -> None:
+        self._runner = runner
+        self._platform = platform
+
+    def parse_incoming(self, payload: dict[str, Any]) -> IncomingMessage | None:
+        return None
+
+    def send(self, recipient: str, text: str) -> dict[str, Any]:
+        _assert_outbound_clean(text)  # R5 PII 게이트
+        return send_notification("Edith", text, runner=self._runner, platform=self._platform)
+
+
 class ChannelRegistry:
     """name → Channel. 멀티채널 dispatch의 진입점."""
 
@@ -166,8 +228,10 @@ class ChannelRegistry:
 __all__ = [
     "Channel",
     "ChannelRegistry",
+    "EmailChannel",
     "IncomingMessage",
     "KakaoChannel",
     "MockChannel",
+    "OsNotifyChannel",
     "TelegramChannel",
 ]

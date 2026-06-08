@@ -194,6 +194,23 @@ def _check_kakao(
     )
 
 
+def _check_optional_env(
+    key: str,
+    env_file: Mapping[str, str],
+    env: Mapping[str, str],
+    *,
+    label: str,
+    fix: str,
+) -> DiagnosticCheck:
+    has_value = bool(_env_value(key, env_file, env))
+    return DiagnosticCheck(
+        name=label,
+        ok=True,
+        detail="설정됨" if has_value else "미설정",
+        fix=fix,
+    )
+
+
 def _check_backend(
     key: str,
     env_file: Mapping[str, str],
@@ -247,6 +264,26 @@ def run_diagnostics(
         _check_google_token(home),
         _check_google_deps(),
         _check_kakao(home, env_file, env_map),
+        _check_optional_env(
+            "EDITH_NOTIFY_EMAIL",
+            env_file,
+            env_map,
+            label="EDITH_NOTIFY_EMAIL(선택)",
+            fix=(
+                ".env에 EDITH_NOTIFY_EMAIL=본인_주소 를 추가하면 "
+                "brief --push email을 쓸 수 있습니다."
+            ),
+        ),
+        _check_optional_env(
+            "EDITH_DS_DIGEST_URL",
+            env_file,
+            env_map,
+            label="EDITH_DS_DIGEST_URL(선택)",
+            fix=(
+                ".env에 EDITH_DS_DIGEST_URL=https://sangho24.github.io/ds-digest/latest.json "
+                "형태로 추가하면 GitHub Pages digest를 읽습니다."
+            ),
+        ),
         _check_backend(
             "EDITH_MAIL_BACKEND",
             env_file,

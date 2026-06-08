@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import urllib.request
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -92,12 +93,17 @@ class LocalDigestSource(DigestSource):
 
 
 def _httpx_fetch(url: str) -> str:
-    """기본 fetch — httpx로 GET. httpx는 lazy import (하드 의존성 회피)."""
-    import httpx
-
-    resp = httpx.get(url, timeout=10.0, follow_redirects=True)
-    resp.raise_for_status()
-    return resp.text
+    """기본 fetch — urllib로 GET. 함수명은 기존 inject 계약 보존용."""
+    req = urllib.request.Request(
+        url,
+        headers={"Accept": "application/json"},
+        method="GET",
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        status = int(getattr(resp, "status", getattr(resp, "code", 200)))
+        if status < 200 or status >= 300:
+            raise RuntimeError(f"ds-digest fetch failed: HTTP {status}")
+        return resp.read().decode("utf-8")
 
 
 class GitHubPagesDigestSource(DigestSource):
@@ -128,8 +134,12 @@ class GitHubPagesDigestSource(DigestSource):
             data = json.loads(body)
         except json.JSONDecodeError:
             return {"date": None, "items": [], "n": 0}
+        if not isinstance(data, dict):
+            return {"date": None, "items": [], "n": 0}
 
         items = data.get("items", [])
+        if not isinstance(items, list):
+            return {"date": None, "items": [], "n": 0}
         return {"date": data.get("date"), "items": items, "n": len(items)}
 
 
