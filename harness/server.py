@@ -232,6 +232,11 @@ def make_app(
     from harness.settings import load_and_apply_settings
 
     load_and_apply_settings(home)
+    from harness.startup import required_setup_message
+
+    setup_message = required_setup_message()
+    if setup_message:
+        _LOG.warning("%s", setup_message)
     # ⚠️ 명시적 None 체크 — secret="" 은 dev 모드 의도. env leak 방지.
     if secret is None:
         secret = os.environ.get("RELAY_SECRET", "")

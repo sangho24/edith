@@ -69,6 +69,22 @@ def test_gui_token_missing_logs_bind_warning(
     assert "⚠️ EDITH_GUI_TOKEN 미설정 — 127.0.0.1 바인드 권장" in caplog.text
 
 
+def test_server_startup_missing_llm_logs_doctor_hint(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("EDITH_LLM", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("XAI_API_KEY", raising=False)
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+
+    with caplog.at_level(logging.WARNING, logger="harness.server"):
+        make_app(edith_home=tmp_path, secret=SECRET)
+
+    assert "harness doctor" in caplog.text
+    assert "EDITH_LLM" in caplog.text
+
+
 # ── /ask ───────────────────────────────────────────────────────────────
 
 
@@ -180,6 +196,25 @@ def test_ask_runner_error_returns_500(tmp_path: Path) -> None:
     resp = client.post("/ask", json={"q": "x"})
     assert resp.status_code == 500
     assert resp.json()["ok"] is False
+
+
+def test_ask_missing_llm_config_returns_friendly_answer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("EDITH_LLM", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("XAI_API_KEY", raising=False)
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    app = make_app(edith_home=tmp_path, secret=SECRET)
+    client = TestClient(app)
+
+    resp = client.post("/ask", json={"q": "안녕"})
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is True
+    assert "harness doctor" in data["answer"]
 
 
 # ── /webhook/telegram ──────────────────────────────────────────────────

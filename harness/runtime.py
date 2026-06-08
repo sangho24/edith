@@ -19,6 +19,7 @@ from harness.llm import (
     MockLLM,
     get_llm,
 )
+from harness.startup import required_setup_message
 from harness.state import Budget, Context, Scope, Trace
 from harness.tools import Registry, build_default_registry
 
@@ -44,13 +45,22 @@ def run(
     """
     budget = budget or Budget()
     registry = registry or build_default_registry()
-    llm = llm or get_llm()
+    trace = Trace.start(task, scope=scope)
+    if llm is None:
+        setup_msg = required_setup_message()
+        if setup_msg:
+            trace.output = setup_msg
+            trace.finalize_reason = "error"
+            trace.record("error", where="setup", msg=setup_msg)
+            trace.record("finalize", reason="error", cost=trace.cost_tokens)
+            trace.save(edith_home / "harness" / "traces")
+            return trace
+        llm = get_llm()
 
     identity = _load_text(edith_home / "identity.md")
     schema = _load_text(edith_home / "CLAUDE.md")
     system_prompt = f"{identity}\n\n---\n\n{schema}{system_suffix}"
 
-    trace = Trace.start(task, scope=scope)
     ctx = Context(edith_home=edith_home, scope=scope, trace=trace)
     messages: list[dict[str, Any]] = [
         *(history or []),

@@ -163,3 +163,20 @@ def test_trace_saves_jsonl(edith_home: Path) -> None:
     assert '"kind": "start"' in content
     assert '"kind": "finalize"' in content
     assert trace.id in files[0].name
+
+
+def test_runtime_missing_llm_config_returns_friendly_message(
+    edith_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("EDITH_LLM", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("XAI_API_KEY", raising=False)
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+
+    trace = run("설정 확인", edith_home=edith_home)
+
+    assert trace.finalize_reason == "error"
+    assert trace.output is not None
+    assert "harness doctor" in trace.output
+    assert "EDITH_LLM" in trace.output
