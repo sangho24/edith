@@ -14,6 +14,7 @@ from harness.approval import ApprovalQueue, ApprovalRequest
 from harness.executor import (
     ApprovalExecutor,
     ExecutionResult,
+    _exec_calendar_create,
     _exec_github_workflow_update_cron,
     default_registry,
 )
@@ -236,7 +237,76 @@ def test_gmail_send_executor_rejects_invalid_email(tmp_path: Path) -> None:
     assert "email" in result.error
 
 
+# ── 실제 executor: calendar_create (GoogleCalendarSource monkeypatch) ────
+
+
+def test_calendar_create_executor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    created: list[dict] = []
+
+    class FakeGoogleCalendar:
+        def __init__(self, *a, **kw) -> None:
+            created.append({"init": kw})
+
+        def create_event(self, **kwargs):  # noqa: ANN001
+            created.append(kwargs)
+            return type("Event", (), {"id": "evt-1", "url": "https://cal/evt-1"})()
+
+    monkeypatch.setattr("harness.calendar.GoogleCalendarSource", FakeGoogleCalendar)
+
+    queue = _queue(tmp_path)
+    req = queue.create(
+        "calendar_create",
+        "google_calendar",
+        "리뷰 미팅: 2026-06-09 10:00-10:30",
+        params={
+            "summary": "리뷰 미팅",
+            "start": "2026-06-09T10:00:00+09:00",
+            "end": "2026-06-09T10:30:00+09:00",
+            "description": "논문 리뷰",
+            "location": "Zoom",
+            "attendees": ["a@example.com"],
+            "calendar_id": "work",
+            "timezone": "Asia/Seoul",
+        },
+    )
+    queue.approve(req.id)
+
+    result = ApprovalExecutor(queue, tmp_path).execute(req.id)
+
+    assert result.ok, result.error
+    assert "evt-1" in result.detail
+    assert created[0] == {"init": {"calendar_id": "work"}}
+    assert created[1]["summary"] == "리뷰 미팅"
+    assert created[1]["attendees"] == ["a@example.com"]
+    assert _get(queue, req.id).status == "executed"
+
+
+def test_calendar_create_executor_missing_params(tmp_path: Path) -> None:
+    req = type("R", (), {"params": {"summary": "x"}})()
+    result = _exec_calendar_create(req, tmp_path)  # type: ignore[arg-type]
+    assert not result.ok
+    assert "params.start" in result.error
+
+
+def test_calendar_create_executor_rejects_bad_times(tmp_path: Path) -> None:
+    req = type(
+        "R",
+        (),
+        {
+            "params": {
+                "summary": "x",
+                "start": "2026-06-09T10:30:00+09:00",
+                "end": "2026-06-09T10:00:00+09:00",
+            }
+        },
+    )()
+    result = _exec_calendar_create(req, tmp_path)  # type: ignore[arg-type]
+    assert not result.ok
+    assert "after" in result.error
+
+
 def test_default_registry_has_known_actions() -> None:
     reg = default_registry()
     assert "github_workflow_update_cron" in reg
     assert "gmail_send" in reg
+    assert "calendar_create" in reg

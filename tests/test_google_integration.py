@@ -38,6 +38,7 @@ def test_google_scopes_cover_gmail_and_calendar() -> None:
     assert "https://www.googleapis.com/auth/gmail.readonly" in GOOGLE_SCOPES
     assert "https://www.googleapis.com/auth/gmail.send" in GOOGLE_SCOPES
     assert "https://www.googleapis.com/auth/calendar.readonly" in GOOGLE_SCOPES
+    assert "https://www.googleapis.com/auth/calendar.events" in GOOGLE_SCOPES
 
 
 def test_build_service_returns_injected(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -55,6 +56,52 @@ def test_token_status_reads_scopes(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     assert st["token_exists"] is True
     assert st["secrets_exists"] is False
     assert "https://www.googleapis.com/auth/calendar.readonly" in st["scopes"]
+
+
+def test_google_calendar_create_event_calls_insert() -> None:
+    service = MagicMock()
+    service.events.return_value.insert.return_value.execute.return_value = {
+        "id": "evt-1",
+        "summary": "리뷰 미팅",
+        "start": {"dateTime": "2026-06-09T10:00:00+09:00"},
+        "end": {"dateTime": "2026-06-09T10:30:00+09:00"},
+        "htmlLink": "https://cal/evt-1",
+    }
+    src = GoogleCalendarSource(service=service, calendar_id="work")
+
+    event = src.create_event(
+        "리뷰 미팅",
+        "2026-06-09T10:00:00+09:00",
+        "2026-06-09T10:30:00+09:00",
+        description="논문 리뷰",
+        location="Zoom",
+        attendees=["a@example.com"],
+        timezone="Asia/Seoul",
+    )
+
+    assert event.id == "evt-1"
+    insert = service.events.return_value.insert
+    insert.assert_called_once()
+    kwargs = insert.call_args.kwargs
+    assert kwargs["calendarId"] == "work"
+    assert kwargs["sendUpdates"] == "none"
+    assert kwargs["body"] == {
+        "summary": "리뷰 미팅",
+        "start": {"dateTime": "2026-06-09T10:00:00+09:00", "timeZone": "Asia/Seoul"},
+        "end": {"dateTime": "2026-06-09T10:30:00+09:00", "timeZone": "Asia/Seoul"},
+        "description": "논문 리뷰",
+        "location": "Zoom",
+        "attendees": [{"email": "a@example.com"}],
+    }
+
+
+def test_google_calendar_create_event_missing_token_safe_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("GOOGLE_TOKEN_FILE", str(tmp_path / "missing.json"))
+    src = GoogleCalendarSource()
+    with pytest.raises(RuntimeError, match="Google 토큰 없음"):
+        src.create_event("x", "2026-06-09T10:00:00+09:00", "2026-06-09T10:30:00+09:00")
 
 
 def test_has_google_token(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

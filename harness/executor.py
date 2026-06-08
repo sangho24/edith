@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from email.utils import getaddresses
 from pathlib import Path
 
@@ -103,11 +104,65 @@ def _exec_gmail_send(req: ApprovalRequest, edith_home: Path) -> ExecutionResult:
     return ExecutionResult(ok=True, detail=f"sent id={resp.get('id', '?')}")
 
 
+def _exec_calendar_create(req: ApprovalRequest, edith_home: Path) -> ExecutionResult:
+    """Google Calendar 일정 생성. params: {summary, start, end, ...}.
+
+    R2 외부 write라 request_approval → ApprovalQueue → ApprovalExecutor 경로에서만 호출된다.
+    """
+    from harness.calendar import GoogleCalendarSource
+
+    params = req.params
+    try:
+        summary = _required_str(params, "summary")
+        start = _required_str(params, "start")
+        end = _required_str(params, "end")
+        # Validate early so queue execution fails with a clear, local error before OAuth/network.
+        start_dt = datetime.fromisoformat(start)
+        end_dt = datetime.fromisoformat(end)
+        try:
+            if start_dt >= end_dt:
+                raise ValueError("params.end must be after params.start")
+        except TypeError as e:
+            raise ValueError("params.start and params.end must use matching timezone forms") from e
+        description = params.get("description")
+        location = params.get("location")
+        attendees = params.get("attendees", [])
+        calendar_id = params.get("calendar_id", "primary")
+        timezone = params.get("timezone")
+        if description is not None and not isinstance(description, str):
+            raise ValueError("params.description must be a string")
+        if location is not None and not isinstance(location, str):
+            raise ValueError("params.location must be a string")
+        if not isinstance(attendees, list) or any(not isinstance(a, str) for a in attendees):
+            raise ValueError("params.attendees must be a list of strings")
+        if not isinstance(calendar_id, str) or not calendar_id.strip():
+            raise ValueError("params.calendar_id must be a non-empty string")
+        if timezone is not None and not isinstance(timezone, str):
+            raise ValueError("params.timezone must be a string")
+    except ValueError as e:
+        return ExecutionResult(ok=False, error=str(e))
+
+    event = GoogleCalendarSource(calendar_id=calendar_id.strip()).create_event(
+        summary=summary,
+        start=start,
+        end=end,
+        description=description,
+        location=location,
+        attendees=attendees,
+        timezone=timezone,
+    )
+    detail = f"created event id={event.id or '?'}"
+    if event.url:
+        detail += f" url={event.url}"
+    return ExecutionResult(ok=True, detail=detail)
+
+
 def default_registry() -> dict[str, ExecutorFn]:
     """action_type → executor. 신규 외부 action은 여기 한 줄 추가."""
     return {
         "github_workflow_update_cron": _exec_github_workflow_update_cron,
         "gmail_send": _exec_gmail_send,
+        "calendar_create": _exec_calendar_create,
     }
 
 

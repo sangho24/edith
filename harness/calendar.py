@@ -141,7 +141,7 @@ def _parse_google_event(item: dict[str, Any]) -> CalendarEvent | None:
 
 
 class GoogleCalendarSource(CalendarSource):
-    """Google Calendar API readonly. google_auth 단일 토큰 공유.
+    """Google Calendar API adapter. google_auth 단일 토큰 공유.
 
     실 호출은 google-api-python-client + 저장된 토큰 필요(`harness oauth google`).
     테스트는 service 주입으로 라이브러리/토큰 없이 검증.
@@ -177,6 +177,99 @@ class GoogleCalendarSource(CalendarSource):
             if ev is not None:
                 out.append(ev)
         return out
+
+    def create_event(
+        self,
+        summary: str,
+        start: datetime | str,
+        end: datetime | str,
+        *,
+        description: str | None = None,
+        location: str | None = None,
+        attendees: list[str] | None = None,
+        timezone: str | None = None,
+    ) -> CalendarEvent:
+        """Create one Google Calendar event via events.insert.
+
+        External write callers must reach this through ApprovalExecutor. Tests can inject
+        ``service`` to avoid OAuth libraries and network.
+        """
+        summary = summary.strip()
+        if not summary:
+            raise ValueError("summary must be a non-empty string")
+        start_iso = _coerce_google_create_dt(start, "start")
+        end_iso = _coerce_google_create_dt(end, "end")
+        if start_iso >= end_iso:
+            raise ValueError("end must be after start")
+        if self._service is None:
+            _require_calendar_write_scope()
+
+        body: dict[str, Any] = {
+            "summary": summary,
+            "start": {"dateTime": start_iso.isoformat()},
+            "end": {"dateTime": end_iso.isoformat()},
+        }
+        if timezone:
+            body["start"]["timeZone"] = timezone
+            body["end"]["timeZone"] = timezone
+        if description:
+            body["description"] = description
+        if location:
+            body["location"] = location
+        if attendees:
+            clean = [email.strip() for email in attendees if email.strip()]
+            if clean:
+                body["attendees"] = [{"email": email} for email in clean]
+
+        try:
+            item = (
+                self._svc()
+                .events()
+                .insert(calendarId=self.calendar_id, body=body, sendUpdates="none")
+                .execute()
+            )
+        except RuntimeError:
+            raise
+        except Exception as e:  # noqa: BLE001 - googleapiclient errors become safe executor errors
+            raise RuntimeError(f"Google Calendar event create failed: {e}") from e
+
+        parsed = _parse_google_event(item)
+        if parsed is None:
+            raise RuntimeError("Google Calendar event create returned no start/end")
+        return parsed
+
+
+def _coerce_google_create_dt(value: datetime | str, key: str) -> datetime:
+    from harness.localtime import edith_tz
+
+    if isinstance(value, datetime):
+        dt = value
+    elif isinstance(value, str):
+        try:
+            dt = datetime.fromisoformat(value)
+        except ValueError as e:
+            raise ValueError(f"{key} must be ISO datetime") from e
+    else:
+        raise ValueError(f"{key} must be ISO datetime")
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=edith_tz())
+
+
+def _require_calendar_write_scope() -> None:
+    from harness.integrations.google_auth import token_status
+
+    write_scope = "https://www.googleapis.com/auth/calendar.events"
+    status = token_status()
+    if not status.get("token_exists"):
+        raise RuntimeError(
+            f"유효한 Google 토큰 없음: {status.get('token_file')}. "
+            "`harness oauth google` 먼저 실행."
+        )
+    scopes = set(status.get("scopes") or [])
+    if write_scope not in scopes:
+        raise RuntimeError(
+            "Google Calendar 쓰기 scope 없음: calendar.events. "
+            "secrets/google_token.json을 지우고 `harness oauth google`로 재인증하세요."
+        )
 
 
 class EventKitCalendarSource(CalendarSource):

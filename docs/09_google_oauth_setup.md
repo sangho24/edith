@@ -3,8 +3,11 @@
 > Edith가 **실제 내 Gmail·구글 캘린더**를 읽고(브리프·선제 제안), 승인 후 실제 메일을
 > 발송하게 하는 1회 세팅. 토큰은 `secrets/`(gitignore)에만 저장되고 커밋되지 않는다.
 
-단일 OAuth 토큰 하나로 Gmail(읽기+발송)과 Calendar(읽기)를 모두 커버한다.
-scope: `gmail.readonly` · `gmail.send` · `calendar.readonly` (최소 권한).
+단일 OAuth 토큰 하나로 Gmail(읽기+발송)과 Calendar(읽기+승인 후 일정 생성)를 모두 커버한다.
+scope: `gmail.readonly` · `gmail.send` · `calendar.readonly` · `calendar.events` (최소 권한).
+
+> 코드에서 scope가 추가되면 기존 `secrets/google_token.json`에는 새 권한이 없다.
+> 토큰 파일을 지우고 `uv run harness oauth google`을 다시 실행해 재인증해야 한다.
 
 ## 0. 라이브러리 설치
 
@@ -83,6 +86,15 @@ GUI도 동일 — 그 환경변수가 떠 있는 셸에서 `make serve` 하면 B
 
 토큰에 `gmail.send` scope가 있으므로 승인만 하면 실제 발송된다.
 
+## 5. 실제 캘린더 일정 생성 (승인 필수)
+
+일정 생성도 외부 write다. `calendar_create` action은 직접 실행하지 않고
+`request_approval` → ApprovalQueue → ApprovalExecutor 경로로만 실행된다.
+승인 화면의 preview에서 제목, 시작/종료, 장소, 참석자를 확인한 뒤 승인하면
+`events.insert`로 Google Calendar에 생성된다.
+
+토큰에 `calendar.events` scope가 없으면 executor는 안전하게 실패하며, 위 재인증 절차를 안내한다.
+
 ## 트러블슈팅
 
 | 증상 | 원인 / 해결 |
@@ -99,5 +111,5 @@ GUI도 동일 — 그 환경변수가 떠 있는 셸에서 `make serve` 하면 B
 - `secrets/`는 `.gitignore` 대상 — client secret·token 절대 커밋 안 됨.
 - 토큰 파일은 **0o600(소유자 전용)** 으로 저장 — 같은 머신 타 사용자도 못 읽음.
 - 토큰 값은 로그·trace·CLI 출력에 노출되지 않음 (`--status`는 scope/계정만 표시).
-- scope는 읽기 + 발송 최소만. 메일 삭제·수정(modify), 캘린더 쓰기 권한은 요청 안 함.
+- scope는 읽기 + 승인된 메일 발송 + 승인된 캘린더 일정 생성 최소만. 메일 삭제·수정(modify), 캘린더 전체 관리 권한은 요청 안 함.
 - 읽기·발송 경로는 브라우저 동의 flow를 트리거하지 않음 — 토큰 발급은 `harness oauth google`로만.

@@ -41,6 +41,7 @@ def test_run_diagnostics_checks_provider_key_branch(
                     "https://www.googleapis.com/auth/gmail.readonly",
                     "https://www.googleapis.com/auth/gmail.send",
                     "https://www.googleapis.com/auth/calendar.readonly",
+                    "https://www.googleapis.com/auth/calendar.events",
                 ]
             }
         ),

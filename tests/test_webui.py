@@ -265,7 +265,7 @@ def test_ui_approve_yes_executes(home: Path) -> None:
 
 def test_ui_approve_yes_no_executor(home: Path) -> None:
     """executor 없는 action_type — 승인됐으나 실행 실패가 응답에 드러남."""
-    req = _queue(home).create("calendar_create", "google_calendar", "일정 생성")
+    req = _queue(home).create("unknown_external_write", "demo", "실행")
     client = TestClient(make_app(edith_home=home, secret=SECRET))
     data = client.post("/ui/approve", json={"id": req.id, "decision": "yes"}).json()
     assert data["status"] == "executed"

@@ -1,7 +1,7 @@
 """Google OAuth 공용 헬퍼 — Gmail + Calendar 단일 토큰.
 
 Gmail(integrations/gmail.py)과 Calendar(calendar.py)가 **하나의 OAuth 토큰**을 공유한다.
-`harness oauth google`가 통합 scope(gmail readonly+send, calendar readonly)로 동의 flow를
+`harness oauth google`가 통합 scope(gmail readonly+send, calendar readonly+events)로 동의 flow를
 한 번 돌려 토큰을 저장하면, 두 소스 모두 그 토큰을 읽는다.
 
 토큰·시크릿 위치(기본, 모두 secrets/ 아래 → .gitignore):
@@ -24,6 +24,7 @@ GOOGLE_SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/gmail.send",
     "https://www.googleapis.com/auth/calendar.readonly",
+    "https://www.googleapis.com/auth/calendar.events",
 ]
 
 
