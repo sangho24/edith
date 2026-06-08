@@ -246,13 +246,36 @@ def mail(fixture: str | None, limit: int) -> None:
 
 
 @main.command()
-def brief() -> None:
+@click.option(
+    "--push",
+    default=None,
+    type=click.Choice(["kakao"]),
+    help="요약 brief를 push 채널로 전송",
+)
+def brief(push: str | None) -> None:
     """Morning Briefing (Phase 3 F4) — 오늘 일정 + 메일 + ds-digest + Top 3."""
     from harness.localtime import edith_now
     from harness.morning import compose_brief
 
     home = _edith_home()
     b = compose_brief(home, now=edith_now())
+    if push == "kakao":
+        from harness.integrations.channel import KakaoChannel
+        from harness.integrations.kakao import KakaoClient, format_kakao_brief_summary
+
+        text = format_kakao_brief_summary(b)
+        try:
+            res = KakaoChannel(KakaoClient()).send("self", text)
+        except RuntimeError as e:
+            click.echo(f"✗ Kakao push 실패: {e}", err=True)
+            click.echo(
+                "  설정 안내: `uv run harness oauth kakao --status` 및 docs/11_kakao_setup.md"
+            )
+            sys.exit(1)
+        click.echo(text)
+        click.echo(f"✓ Kakao push: {res}")
+        return
+
     click.echo(b.render_text())
 
 
@@ -474,6 +497,33 @@ def oauth_google(status: bool) -> None:
     click.echo(f"✓ 토큰 저장: {res['token_file']}")
     click.echo("  scopes: " + ", ".join(res["scopes"]))
     click.echo("  실연동: EDITH_MAIL_BACKEND=gmail EDITH_CALENDAR_BACKEND=google make brief")
+
+
+@oauth_group.command("kakao")
+@click.option("--status", is_flag=True, help="토큰/키 상태만 출력 (flow 실행 안 함)")
+def oauth_kakao(status: bool) -> None:
+    """KakaoTalk 나에게 보내기 OAuth 상태/수동 세팅 안내."""
+    from harness.integrations.kakao import kakao_token_status, run_oauth_flow_stub
+
+    if status:
+        st = kakao_token_status()
+        click.echo(
+            f"REST API key : {'있음' if st['rest_api_key_exists'] else '없음'} (KAKAO_REST_API_KEY)"
+        )
+        token_state = "있음" if st["token_exists"] else "없음"
+        click.echo(f"token        : {st['token_file']} ({token_state})")
+        click.echo(f"access_token : {'있음' if st['has_access_token'] else '없음'}")
+        click.echo(f"refresh_token: {'있음' if st['has_refresh_token'] else '없음'}")
+        if st["expired"] is not None:
+            click.echo(f"expired      : {st['expired']}")
+        if not st["rest_api_key_exists"] or not st["token_exists"]:
+            click.echo("→ docs/11_kakao_setup.md를 따라 REST 키와 토큰을 준비하세요.")
+        return
+
+    res = run_oauth_flow_stub()
+    click.echo(f"✗ {res['message']}", err=True)
+    click.echo(f"  token file: {res['token_file']}")
+    sys.exit(1)
 
 
 @main.command("seed-demo")

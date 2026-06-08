@@ -1,11 +1,10 @@
 """Phase 4 F13 — 멀티채널 surface 추상화.
 
-Edith의 입출력 표면(Telegram·email·...)을 platform-agnostic Channel로 통일한다.
-지금 실제 wired된 채널은 Telegram 하나뿐 — 인터페이스를 추출해두면 새 채널은
-어댑터 파일 하나로 끝난다.
+Edith의 입출력 표면(Telegram·Kakao·email·...)을 platform-agnostic Channel로 통일한다.
+인터페이스를 추출해두면 새 채널은 어댑터 파일 하나로 끝난다.
 
 OpenClaw처럼 14개 채널을 다 만들지 않는다: caller 없는 채널은 유지보수 부채.
-EmailChannel·KakaoChannel은 실제 호출부가 생길 때 어댑터를 추가한다.
+EmailChannel은 실제 호출부가 생길 때 어댑터를 추가한다.
 """
 
 from __future__ import annotations
@@ -14,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from harness import policies
+from harness.integrations.kakao import KakaoClient
 from harness.integrations.telegram import TelegramClient
 
 
@@ -52,8 +52,9 @@ class Channel(Protocol):
 
     구현체:
     - TelegramChannel (실 환경)
+    - KakaoChannel (실 환경, outbound-only self memo)
     - MockChannel (테스트)
-    - 추후: EmailChannel, KakaoChannel — 실제 호출부가 생기면 어댑터 추가
+    - 추후: EmailChannel — 실제 호출부가 생기면 어댑터 추가
     """
 
     name: str
@@ -122,6 +123,26 @@ class TelegramChannel:
         return self._client.send_message(chat_id=int(recipient), text=text)
 
 
+class KakaoChannel:
+    """KakaoTalk '나에게 보내기' 전용 outbound 채널.
+
+    recipient는 인터페이스 호환용으로 받지만 무시한다. 일반 친구/채팅방 발송으로 확장하지
+    않고, KakaoClient.send_memo(self memo endpoint)만 호출한다.
+    """
+
+    name = "kakao"
+
+    def __init__(self, client: KakaoClient) -> None:
+        self._client = client
+
+    def parse_incoming(self, payload: dict[str, Any]) -> IncomingMessage | None:
+        return None
+
+    def send(self, recipient: str, text: str) -> dict[str, Any]:
+        _assert_outbound_clean(text)  # R5 PII 게이트
+        return self._client.send_memo(text)
+
+
 class ChannelRegistry:
     """name → Channel. 멀티채널 dispatch의 진입점."""
 
@@ -146,6 +167,7 @@ __all__ = [
     "Channel",
     "ChannelRegistry",
     "IncomingMessage",
+    "KakaoChannel",
     "MockChannel",
     "TelegramChannel",
 ]

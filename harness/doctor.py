@@ -151,6 +151,49 @@ def _check_google_deps() -> DiagnosticCheck:
     )
 
 
+def _check_kakao(
+    edith_home: Path,
+    env_file: Mapping[str, str],
+    env: Mapping[str, str],
+) -> DiagnosticCheck:
+    from harness.integrations.kakao import kakao_token_status
+
+    status = kakao_token_status(token_file=edith_home / "secrets" / "kakao_token.json")
+    has_key = bool(_env_value("KAKAO_REST_API_KEY", env_file, env))
+    has_any = has_key or bool(status.get("token_exists"))
+    if not has_any:
+        return DiagnosticCheck(
+            name="Kakao 설정(선택)",
+            ok=True,
+            detail="미설정",
+            fix=(
+                "카카오 push를 쓰려면 docs/11_kakao_setup.md를 따라 "
+                "KAKAO_REST_API_KEY와 토큰을 준비하세요."
+            ),
+        )
+
+    ok = (
+        has_key
+        and bool(status.get("has_access_token"))
+        and bool(status.get("has_refresh_token"))
+        and status.get("expired") is not True
+    )
+    bits = [
+        "REST API 키 있음" if has_key else "REST API 키 없음",
+        "토큰 있음" if status.get("token_exists") else "토큰 없음",
+    ]
+    if status.get("token_exists"):
+        bits.append("refresh 있음" if status.get("has_refresh_token") else "refresh 없음")
+        if status.get("expired") is True:
+            bits.append("access 만료")
+    return DiagnosticCheck(
+        name="Kakao 설정(선택)",
+        ok=ok,
+        detail=", ".join(bits),
+        fix="docs/11_kakao_setup.md를 따라 .env와 secrets/kakao_token.json을 점검하세요.",
+    )
+
+
 def _check_backend(
     key: str,
     env_file: Mapping[str, str],
@@ -203,6 +246,7 @@ def run_diagnostics(
         _check_llm(env_file, env_map),
         _check_google_token(home),
         _check_google_deps(),
+        _check_kakao(home, env_file, env_map),
         _check_backend(
             "EDITH_MAIL_BACKEND",
             env_file,
