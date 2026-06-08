@@ -164,6 +164,50 @@ def test_ui_proposals_accept_creates_approvals(tmp_path: Path) -> None:
     assert pending[0].scope == "personal"
 
 
+def test_propose_to_approve_to_execute_server_e2e(tmp_path: Path) -> None:
+    wf = tmp_path / ".github" / "workflows" / "digest.yml"
+    wf.parent.mkdir(parents=True)
+    wf.write_text(
+        "name: digest\non:\n  schedule:\n    - cron: '10 22 * * *'\n",
+        encoding="utf-8",
+    )
+    out = _propose_workflow(
+        {
+            "title": "digest cron 변경",
+            "steps": [
+                {
+                    "intent": "cron 변경",
+                    "action_type": "github_workflow_update_cron",
+                    "params": {
+                        "workflow_path": ".github/workflows/digest.yml",
+                        "new_cron": "0 21 * * *",
+                    },
+                    "support_refs": ["harness/traces/x.jsonl"],
+                    "risk_score": 3,
+                }
+            ],
+        },
+        _ctx(tmp_path),
+    )
+    client = _client(tmp_path)
+
+    decided = client.post(
+        "/ui/proposals/decide",
+        json={"id": out["proposal_id"], "decision": "accept"},
+    )
+    assert decided.status_code == 200
+    queued = decided.json()["queued_approvals"]
+    assert len(queued) == 1
+
+    approved = client.post("/ui/approve", json={"id": queued[0], "decision": "yes"})
+
+    assert approved.status_code == 200
+    data = approved.json()
+    assert data["status"] == "executed"
+    assert data["execution"]["ok"] is True
+    assert "0 21 * * *" in wf.read_text(encoding="utf-8")
+
+
 def test_ui_proposals_partial_accept(tmp_path: Path) -> None:
     pid = _seed_proposal(tmp_path)
     client = _client(tmp_path)

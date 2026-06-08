@@ -6,6 +6,7 @@ google-api-python-client 미설치 환경에서도 Mock 부분은 검증 가능�
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Any
 from unittest.mock import MagicMock
@@ -240,6 +241,39 @@ def test_gmail_source_unread_label_detection() -> None:
     by_id = {m.id: m for m in out}
     assert by_id["m1"].is_unread
     assert not by_id["m2"].is_unread
+
+
+def test_gmail_batch_partial_failure_drops_failed_message(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class PartialFailBatch:
+        def __init__(self) -> None:
+            self._items: list[Any] = []
+
+        def add(self, req: Any, callback: Any, request_id: str) -> None:
+            self._items.append((request_id, req, callback))
+
+        def execute(self) -> None:
+            for rid, req, cb in self._items:
+                if rid == "1":
+                    cb(rid, None, RuntimeError("boom"))
+                else:
+                    cb(rid, req.execute(), None)
+
+    fake_msgs = [
+        _fake_gmail_message(msg_id="m1", subject="성공 1"),
+        _fake_gmail_message(msg_id="m2", subject="실패"),
+        _fake_gmail_message(msg_id="m3", subject="성공 2"),
+    ]
+    service = _make_fake_service(fake_msgs)
+    service.new_batch_http_request.side_effect = lambda: PartialFailBatch()
+    src = GmailSource(service=service)
+
+    with caplog.at_level(logging.WARNING, logger="harness.integrations.gmail"):
+        out = src.list_unread(max_results=10)
+
+    assert [m.id for m in out] == ["m1", "m3"]
+    assert "Gmail batch dropped 1/3 messages" in caplog.text
 
 
 # ── get_mail_source ─────────────────────────────────────────────────────

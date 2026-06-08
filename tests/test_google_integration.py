@@ -6,8 +6,10 @@
 from __future__ import annotations
 
 import json
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from types import ModuleType
 from unittest.mock import MagicMock
 
 import pytest
@@ -22,6 +24,7 @@ from harness.integrations.google_auth import (
     GOOGLE_SCOPES,
     build_google_service,
     has_google_token,
+    load_google_credentials,
     token_status,
 )
 from harness.mail import (
@@ -56,6 +59,90 @@ def test_token_status_reads_scopes(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     assert st["token_exists"] is True
     assert st["secrets_exists"] is False
     assert "https://www.googleapis.com/auth/calendar.readonly" in st["scopes"]
+
+
+def _module(name: str) -> ModuleType:
+    mod = ModuleType(name)
+    mod.__path__ = []  # type: ignore[attr-defined]
+    return mod
+
+
+def test_load_google_credentials_refreshes_expired_token_without_flow(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    token_file = tmp_path / "google_token.json"
+    token_file.write_text(json.dumps({"token": "old"}), encoding="utf-8")
+    calls: list[str] = []
+
+    class FakeRequest:
+        def __init__(self) -> None:
+            calls.append("request")
+
+    class FakeCredentials:
+        valid = False
+        expired = True
+        refresh_token = "refresh-token"
+        scopes = GOOGLE_SCOPES
+
+        @classmethod
+        def from_authorized_user_file(
+            cls,
+            filename: str,
+            scopes: list[str],
+        ) -> FakeCredentials:
+            assert filename == str(token_file)
+            assert scopes == GOOGLE_SCOPES
+            return cls()
+
+        def refresh(self, request: FakeRequest) -> None:
+            assert isinstance(request, FakeRequest)
+            calls.append("refresh")
+            self.valid = True
+
+        def to_json(self) -> str:
+            return json.dumps({"token": "new", "scopes": self.scopes})
+
+    class FakeFlow:
+        @classmethod
+        def from_client_secrets_file(cls, *_args, **_kwargs):  # noqa: ANN206, ANN002, ANN003
+            raise AssertionError("OAuth flow must not run when allow_flow=False refresh works")
+
+    google_mod = _module("google")
+    auth_mod = _module("google.auth")
+    transport_mod = _module("google.auth.transport")
+    requests_mod = ModuleType("google.auth.transport.requests")
+    requests_mod.Request = FakeRequest  # type: ignore[attr-defined]
+    oauth2_mod = _module("google.oauth2")
+    credentials_mod = ModuleType("google.oauth2.credentials")
+    credentials_mod.Credentials = FakeCredentials  # type: ignore[attr-defined]
+    oauthlib_mod = _module("google_auth_oauthlib")
+    flow_mod = ModuleType("google_auth_oauthlib.flow")
+    flow_mod.InstalledAppFlow = FakeFlow  # type: ignore[attr-defined]
+
+    for name, mod in {
+        "google": google_mod,
+        "google.auth": auth_mod,
+        "google.auth.transport": transport_mod,
+        "google.auth.transport.requests": requests_mod,
+        "google.oauth2": oauth2_mod,
+        "google.oauth2.credentials": credentials_mod,
+        "google_auth_oauthlib": oauthlib_mod,
+        "google_auth_oauthlib.flow": flow_mod,
+    }.items():
+        monkeypatch.setitem(sys.modules, name, mod)
+
+    creds = load_google_credentials(
+        token_file=token_file,
+        secrets_file=tmp_path / "missing_client.json",
+        scopes=GOOGLE_SCOPES,
+        allow_flow=False,
+    )
+
+    assert isinstance(creds, FakeCredentials)
+    assert calls == ["request", "refresh"]
+    saved = json.loads(token_file.read_text(encoding="utf-8"))
+    assert saved["token"] == "new"
 
 
 def test_google_calendar_create_event_calls_insert() -> None:

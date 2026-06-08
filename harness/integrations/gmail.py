@@ -15,6 +15,7 @@ scope 는 readonly · send · modify 셋만 사용. 외부 send 는 policies.all
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -26,6 +27,7 @@ from harness.integrations.google_auth import GOOGLE_SCOPES, load_google_credenti
 # Gmail은 Calendar와 단일 토큰을 공유한다(google_auth.GOOGLE_SCOPES). 최소 권한 —
 # 읽기 + 발송만, modify(삭제·수정)는 요청하지 않는다. 별도 credential 로딩 경로를 두지 않음.
 GMAIL_SCOPES = GOOGLE_SCOPES
+_LOG = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -133,10 +135,13 @@ class GmailSource:
         if not msg_ids:
             return []
         out: dict[str, MailMessage] = {}
+        dropped: list[str] = []
 
         def _cb(request_id: str, response: Any, exception: Any) -> None:
             if exception is None and response is not None:
                 out[request_id] = self._parse(response)
+            else:
+                dropped.append(request_id)
 
         batch = self._service.new_batch_http_request()
         for i, mid in enumerate(msg_ids):
@@ -149,6 +154,13 @@ class GmailSource:
                 request_id=str(i),
             )
         batch.execute()
+        if dropped:
+            _LOG.warning(
+                "Gmail batch dropped %d/%d messages: %s",
+                len(dropped),
+                len(msg_ids),
+                dropped,
+            )
         return [out[str(i)] for i in range(len(msg_ids)) if str(i) in out]
 
     def get_thread(self, thread_id: str) -> list[MailMessage]:
@@ -189,15 +201,6 @@ class GmailSource:
             .send(userId="me", body={"raw": raw})
             .execute()
         )
-
-    def _fetch_message(self, msg_id: str) -> MailMessage:
-        m = (
-            self._service.users()
-            .messages()
-            .get(userId="me", id=msg_id, format="metadata")
-            .execute()
-        )
-        return self._parse(m)
 
     def _parse(self, m: dict[str, Any]) -> MailMessage:
         headers = {h["name"].lower(): h["value"] for h in m.get("payload", {}).get("headers", [])}

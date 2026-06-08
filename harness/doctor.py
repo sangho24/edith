@@ -83,10 +83,15 @@ def _check_llm(env_file: Mapping[str, str], env: Mapping[str, str]) -> Diagnosti
             detail="EDITH_LLM 없음",
             fix=".env에 EDITH_LLM=gemini|groq|grok|anthropic 중 하나를 추가하세요.",
         )
-    key_name, key_fix = _PROVIDER_KEYS.get(
-        mode,
-        ("ANTHROPIC_API_KEY", f"EDITH_LLM={mode}에 맞는 provider API 키를 .env에 추가하세요."),
-    )
+    provider = _PROVIDER_KEYS.get(mode)
+    if provider is None:
+        return DiagnosticCheck(
+            name="LLM 설정",
+            ok=False,
+            detail=f"EDITH_LLM={mode} 지원 안 됨",
+            fix="EDITH_LLM 값은 anthropic, gemini, grok, groq, mock 중 하나로 설정하세요.",
+        )
+    key_name, key_fix = provider
     if not key_name:
         return DiagnosticCheck(
             name="LLM 설정",

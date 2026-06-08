@@ -64,3 +64,15 @@ def test_run_diagnostics_checks_provider_key_branch(
     assert _check(with_key, "EDITH_MAIL_BACKEND").ok is True
     assert _check(with_key, "EDITH_CALENDAR_BACKEND").ok is True
     assert _check(with_key, "필수 디렉토리").ok is True
+
+
+def test_check_llm_unknown_provider_fails_closed(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("EDITH_HOME", str(tmp_path))
+    (tmp_path / ".env").write_text("EDITH_LLM=openai\n", encoding="utf-8")
+
+    result = run_diagnostics(tmp_path, env={"ANTHROPIC_API_KEY": "present"})
+    llm = _check(result, "LLM 설정")
+
+    assert llm.ok is False
+    assert "지원 안 됨" in llm.detail
+    assert "anthropic, gemini, grok, groq, mock" in llm.fix

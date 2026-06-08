@@ -217,6 +217,58 @@ def test_ask_missing_llm_config_returns_friendly_answer(
     assert "harness doctor" in data["answer"]
 
 
+def test_ask_passes_history_to_runtime(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, Any] = {}
+
+    class FakeTrace:
+        id = "trace_history"
+        output = "ok"
+        n_steps = 1
+        cost_tokens = 0
+
+    def fake_runtime_run(
+        task: str,
+        *,
+        edith_home: Path,
+        history: list[dict[str, str]],
+        system_suffix: str,
+    ) -> Any:
+        captured["task"] = task
+        captured["edith_home"] = edith_home
+        captured["history"] = history
+        captured["system_suffix"] = system_suffix
+        return FakeTrace()
+
+    monkeypatch.setattr("harness.runtime.run", fake_runtime_run)
+    app = make_app(edith_home=tmp_path, secret=SECRET)
+    client = TestClient(app)
+
+    resp = client.post(
+        "/ask",
+        json={
+            "q": "이어 말해줘",
+            "history": [
+                {"role": "system", "content": "drop"},
+                {"role": "user", "content": "앞 질문"},
+                {"role": "assistant", "content": "앞 답변"},
+                {"role": "assistant", "content": ""},
+                "bad",
+            ],
+        },
+    )
+
+    assert resp.status_code == 200
+    assert captured["task"] == "이어 말해줘"
+    assert captured["edith_home"] == tmp_path
+    assert captured["history"] == [
+        {"role": "user", "content": "앞 질문"},
+        {"role": "assistant", "content": "앞 답변"},
+    ]
+    assert "대화 모드" in captured["system_suffix"]
+
+
 # ── /webhook/telegram ──────────────────────────────────────────────────
 
 
