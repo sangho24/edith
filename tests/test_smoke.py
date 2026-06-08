@@ -106,10 +106,10 @@ def test_policy_blocks_external_write(edith_home: Path) -> None:
 
 
 def test_registry_has_expected_tools() -> None:
-    """기본 registry에 skill manifest의 모든 tool 등록 (P1: 9 + P3: 9 + P4: 1 + P5: 2)."""
+    """기본 registry에 skill manifest의 모든 tool 등록."""
     reg = build_default_registry()
     specs = reg.all_specs()
-    assert len(specs) == 21
+    assert len(specs) == 23
     names = {t["name"] for t in specs}
     expected = {
         # Phase 1 — core skill
@@ -139,6 +139,9 @@ def test_registry_has_expected_tools() -> None:
         "health_summary",
         # Phase 5.2 F29a — mcp skill
         "recommend_mcp",
+        # Tier 3 — recurring patterns
+        "pattern_match",
+        "pattern_list",
         # Phase 5.2 F28 — proposal skill
         "propose_workflow",
     }

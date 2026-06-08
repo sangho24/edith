@@ -293,6 +293,28 @@ def test_render_includes_all_sections(edith_home: Path) -> None:
     assert "걸음 8231" in text
 
 
+def test_compose_brief_surfaces_suggested_pattern(edith_home: Path) -> None:
+    traces_dir = edith_home / "harness" / "traces"
+    for i in range(3):
+        (traces_dir / f"2026-06-0{i + 1}T09-00-00_{i}.jsonl").write_text(
+            json.dumps(
+                {
+                    "t": 0.0,
+                    "kind": "start",
+                    "task": "daily standup notes",
+                    "scope": "personal",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+    brief = compose_brief(edith_home)
+
+    assert brief.patterns == ["🔁 늘 하시던 daily standup notes"]
+    assert "🔁 늘 하시던 daily standup notes" in brief.render_text()
+
+
 def test_render_empty_brief(edith_home: Path) -> None:
     brief = compose_brief(edith_home)
     text = brief.render_text()

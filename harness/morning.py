@@ -37,6 +37,7 @@ class MorningBrief:
     digest: dict = field(default_factory=lambda: {"date": None, "items": [], "n": 0})
     health: dict = field(default_factory=dict)
     top3: list[str] = field(default_factory=list)
+    patterns: list[str] = field(default_factory=list)
     errors: dict[str, str] = field(default_factory=dict)
 
     def render_text(self) -> str:
@@ -57,6 +58,10 @@ class MorningBrief:
             lines.append("Top 3:")
             for t in self.top3:
                 lines.append(f"  • {t}")
+            lines.append("")
+
+        if self.patterns:
+            lines.extend(self.patterns)
             lines.append("")
 
         # 일정
@@ -195,5 +200,13 @@ def compose_brief(edith_home: Path, now: datetime | None = None) -> MorningBrief
 
     # 5. Top 3
     brief.top3 = _build_top3(brief.today, brief.mail_summary, brief.digest)
+
+    # 6. 반복 패턴 — trace 기반 읽기 전용 제안. 실패해도 brief 자체는 유지한다.
+    try:
+        from harness.patterns import suggest_pattern_lines
+
+        brief.patterns = suggest_pattern_lines(edith_home, limit=1)
+    except Exception as e:
+        brief.errors["patterns"] = _error_marker(e)
 
     return brief

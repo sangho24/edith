@@ -1,0 +1,18 @@
+# Tier 3.2 — 자카드 유사도 0.6 미만 task들은 별도 클러스터로 분리된다.
+id: t3_patterns_jaccard_split
+kind: call
+phase: 10
+component: T3.2
+target: harness.patterns:pattern_summary
+inputs:
+  kwargs:
+    traces:
+      - task: "draft iclr review"
+      - task: "book dentist appointment"
+      - task: "pay rent invoice"
+expected:
+  returns_contains:
+    n: 3
+    labels: ["book dentist appointment", "draft iclr review", "pay rent invoice"]
+    supports: [1, 1, 1]
+    levels: ["observe", "observe", "observe"]

@@ -347,6 +347,33 @@ def reading_suggestions(queue: list[dict], slot: str, now_iso: str) -> list[Sugg
     ]
 
 
+def pattern_suggestions(edith_home: Path, slot: str, now_iso: str) -> list[Suggestion]:
+    """반복 task 패턴 → 자동 실행 없는 한 줄 nudge."""
+    from harness.patterns import list_patterns
+
+    out: list[Suggestion] = []
+    day = now_iso[:10]
+    for idx, pattern in enumerate(list_patterns(edith_home, min_support=3)):
+        if pattern.level != "suggest":
+            continue
+        out.append(
+            Suggestion(
+                id=f"{day}:{slot}:recurring_pattern:{idx}",
+                category="recurring_pattern",
+                scope="personal",
+                title=f"🔁 늘 하시던 {pattern.label}",
+                why=f"최근 trace에서 비슷한 task가 {pattern.support}회 반복됨",
+                signal_key=f"recurring_pattern::{pattern.label}",
+                score=2.5,
+                action_hint=None,
+                created_at=now_iso,
+                slot=slot,
+                status="proposed",
+            )
+        )
+    return out
+
+
 def _collect_from_signals(signals: dict, slot: str, now_iso: str) -> list[Suggestion]:
     """signals dict(mail_summary/today/digest/health/reading) → 전체 후보."""
     out: list[Suggestion] = []
@@ -397,7 +424,9 @@ class SuggestionGenerator:
             "health": brief.health,
             "reading": _load_reading_queue(edith_home),
         }
-        return _collect_from_signals(signals, slot, now_iso)
+        return _collect_from_signals(signals, slot, now_iso) + pattern_suggestions(
+            edith_home, slot, now_iso
+        )
 
 
 # ── Gate ──
@@ -630,6 +659,7 @@ __all__ = [
     "digest_suggestions",
     "health_suggestions",
     "is_atrophy_protected",
+    "pattern_suggestions",
     "preview_checkin",
     "reading_suggestions",
     "record_feedback",

@@ -1,0 +1,21 @@
+# Tier 3.2 — 동일 fingerprint task 3개는 support 3 패턴 1개로 묶인다.
+id: t3_patterns_support
+kind: call
+phase: 10
+component: T3.2
+target: harness.patterns:pattern_summary
+inputs:
+  kwargs:
+    traces:
+      - task: "daily standup notes"
+        at: "2026-06-01T09:00:00+09:00"
+      - task: "daily standup notes"
+        at: "2026-06-02T09:00:00+09:00"
+      - task: "daily standup notes"
+        at: "2026-06-03T09:00:00+09:00"
+expected:
+  returns_contains:
+    n: 1
+    labels: ["daily standup notes"]
+    supports: [3]
+    levels: ["suggest"]

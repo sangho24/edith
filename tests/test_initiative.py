@@ -370,6 +370,36 @@ def test_run_checkin_surfaces_calendar_conflict(edith_home: Path) -> None:
     assert "calendar_conflict" in cats
 
 
+def test_run_checkin_surfaces_recurring_pattern(edith_home: Path) -> None:
+    traces_dir = edith_home / "harness" / "traces"
+    traces_dir.mkdir(parents=True, exist_ok=True)
+    for i in range(3):
+        (traces_dir / f"2026-06-0{i + 1}T09-00-00_{i}.jsonl").write_text(
+            json.dumps(
+                {
+                    "t": 0.0,
+                    "kind": "start",
+                    "task": "daily standup notes",
+                    "scope": "personal",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+    out = run_checkin(
+        edith_home,
+        "morning",
+        "2026-06-04T08:00:00+09:00",
+        weekday_cap=5,
+    )
+
+    pushed = out["pushed"]
+    assert pushed[0]["category"] == "recurring_pattern"
+    assert pushed[0]["title"] == "🔁 늘 하시던 daily standup notes"
+    assert pushed[0]["action_hint"] is None
+
+
 def test_preview_checkin_does_not_mutate_state(edith_home: Path) -> None:
     _setup_urgent_mail(edith_home, ["긴급: A"])
     pv1 = preview_checkin(edith_home, "morning", now_iso=WEEKDAY_ISO)
