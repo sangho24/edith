@@ -150,6 +150,34 @@ def test_github_workflow_executor_missing_params(tmp_path: Path) -> None:
     assert "workflow_path" in result.error
 
 
+def test_github_workflow_executor_rejects_invalid_cron(tmp_path: Path) -> None:
+    req = type(
+        "R",
+        (),
+        {"params": {"workflow_path": ".github/workflows/d.yml", "new_cron": "not-cron"}},
+    )()
+    result = _exec_github_workflow_update_cron(req, tmp_path)  # type: ignore[arg-type]
+    assert not result.ok
+    assert "5-field cron" in result.error
+
+
+def test_github_workflow_executor_rejects_non_int_idx(tmp_path: Path) -> None:
+    req = type(
+        "R",
+        (),
+        {
+            "params": {
+                "workflow_path": ".github/workflows/d.yml",
+                "new_cron": "0 0 * * *",
+                "idx": "0",
+            }
+        },
+    )()
+    result = _exec_github_workflow_update_cron(req, tmp_path)  # type: ignore[arg-type]
+    assert not result.ok
+    assert "params.idx" in result.error
+
+
 def test_github_workflow_executor_absolute_path(tmp_path: Path) -> None:
     wf = tmp_path / "abs_digest.yml"
     wf.write_text(_WORKFLOW, encoding="utf-8")
@@ -193,7 +221,19 @@ def test_gmail_send_executor_missing_params(tmp_path: Path) -> None:
     queue.approve(req.id)
     result = ApprovalExecutor(queue, tmp_path).execute(req.id)
     assert not result.ok
-    assert "to·subject·body" in result.error
+    assert "params.subject" in result.error
+
+
+def test_gmail_send_executor_rejects_invalid_email(tmp_path: Path) -> None:
+    queue = _queue(tmp_path)
+    req = queue.create(
+        "gmail_send", "gmail", "p",
+        params={"to": "not-an-email", "subject": "안녕", "body": "본문"},
+    )
+    queue.approve(req.id)
+    result = ApprovalExecutor(queue, tmp_path).execute(req.id)
+    assert not result.ok
+    assert "email" in result.error
 
 
 def test_default_registry_has_known_actions() -> None:

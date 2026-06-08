@@ -156,6 +156,46 @@ def _sanitize_history(raw: Any) -> list[dict[str, str]]:
     return out
 
 
+async def _json_object(request: Request) -> dict[str, Any]:
+    try:
+        payload = await request.json()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"invalid json: {e}") from e
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="json object required")
+    return payload
+
+
+def _require_str_field(
+    payload: dict[str, Any],
+    field: str,
+    *,
+    choices: set[str] | None = None,
+) -> str:
+    value = payload.get(field)
+    if not isinstance(value, str) or not value.strip():
+        raise HTTPException(status_code=400, detail=f"{field} must be a non-empty string")
+    value = value.strip()
+    if choices is not None and value not in choices:
+        allowed = "|".join(sorted(choices))
+        raise HTTPException(status_code=400, detail=f"{field} must be one of {allowed}")
+    return value
+
+
+def _accepted_steps(payload: dict[str, Any]) -> list[int] | None:
+    if "accepted_steps" not in payload:
+        return None
+    raw = payload["accepted_steps"]
+    if not isinstance(raw, list):
+        raise HTTPException(status_code=400, detail="accepted_steps must be a list of ints")
+    out: list[int] = []
+    for value in raw:
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise HTTPException(status_code=400, detail="accepted_steps must be a list of ints")
+        out.append(value)
+    return out
+
+
 def _brief_text(home: Path) -> str:
     """morning brief 텍스트 — Web GUI와 Telegram /brief 명령이 공유.
 
@@ -385,14 +425,9 @@ def make_app(
     @app.post("/ui/approve")
     async def ui_approve(request: Request) -> JSONResponse:
         """승인 큐 항목 승인/거절. body: {"id": ..., "decision": "yes"|"no"}."""
-        try:
-            payload = await request.json()
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"invalid json: {e}") from e
-        req_id = payload.get("id", "")
-        decision = payload.get("decision", "")
-        if not req_id or decision not in ("yes", "no"):
-            raise HTTPException(status_code=400, detail="id + decision(yes|no) required")
+        payload = await _json_object(request)
+        req_id = _require_str_field(payload, "id")
+        decision = _require_str_field(payload, "decision", choices={"yes", "no"})
         queue = _approval_queue()
 
         if decision == "no":
@@ -470,14 +505,10 @@ def make_app(
         ("승인만"). 실제 실행은 Approvals 탭에서. external write가 아닌(action_type 빈)
         step은 큐 생성 생략(즉시 처리 대상 아님 — v1은 큐 등록만 추적).
         """
-        try:
-            payload = await request.json()
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"invalid json: {e}") from e
-        pid = payload.get("id", "")
-        decision = payload.get("decision", "")
-        if not pid or decision not in ("accept", "reject"):
-            raise HTTPException(status_code=400, detail="id + decision(accept|reject) required")
+        payload = await _json_object(request)
+        pid = _require_str_field(payload, "id")
+        decision = _require_str_field(payload, "decision", choices={"accept", "reject"})
+        accepted = _accepted_steps(payload)
 
         store = _proposal_store()
         proposal = store.get(pid)
@@ -490,7 +521,6 @@ def make_app(
             store.close(pid)
             return JSONResponse({"ok": True, "id": pid, "status": "rejected"})
 
-        accepted = payload.get("accepted_steps")  # None이면 전체
         queue = _approval_queue()
         queued: list[str] = []
         for step in proposal.steps:
@@ -525,14 +555,12 @@ def make_app(
             if not secret or not _verify_signature(body, signature, secret):
                 raise HTTPException(status_code=401, detail="invalid signature")
 
-        try:
-            payload = await request.json()
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"invalid json: {e}") from e
+        payload = await _json_object(request)
 
-        question = payload.get("q") or payload.get("question") or ""
-        if not question.strip():
-            raise HTTPException(status_code=400, detail="q required")
+        raw_question = payload.get("q") if "q" in payload else payload.get("question")
+        if not isinstance(raw_question, str) or not raw_question.strip():
+            raise HTTPException(status_code=400, detail="q must be a non-empty string")
+        question = raw_question.strip()
 
         history = _sanitize_history(payload.get("history"))
 

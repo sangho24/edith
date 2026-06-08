@@ -157,6 +157,20 @@ def test_ask_missing_question_rejected(tmp_path: Path) -> None:
     assert resp.status_code == 400
 
 
+def test_ask_rejects_non_object_payload(tmp_path: Path) -> None:
+    app = make_app(edith_home=tmp_path, secret=SECRET, runner=_fake_run)
+    client = TestClient(app)
+    resp = client.post("/ask", json=["not", "object"])
+    assert resp.status_code == 400
+
+
+def test_ask_rejects_non_string_question(tmp_path: Path) -> None:
+    app = make_app(edith_home=tmp_path, secret=SECRET, runner=_fake_run)
+    client = TestClient(app)
+    resp = client.post("/ask", json={"q": 123})
+    assert resp.status_code == 400
+
+
 def test_ask_runner_error_returns_500(tmp_path: Path) -> None:
     def boom(task: str, edith_home: Path) -> Any:
         raise RuntimeError("LLM API down")

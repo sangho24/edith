@@ -187,6 +187,21 @@ def test_ui_proposals_reject(tmp_path: Path) -> None:
 def test_ui_proposals_decide_bad_input(tmp_path: Path) -> None:
     client = _client(tmp_path)
     assert client.post("/ui/proposals/decide", json={"id": "x"}).status_code == 400
+    assert client.post("/ui/proposals/decide", json=["not", "object"]).status_code == 400
+    assert (
+        client.post(
+            "/ui/proposals/decide",
+            json={"id": "x", "decision": "accept", "accepted_steps": "1"},
+        ).status_code
+        == 400
+    )
+    assert (
+        client.post(
+            "/ui/proposals/decide",
+            json={"id": "x", "decision": "accept", "accepted_steps": ["1"]},
+        ).status_code
+        == 400
+    )
 
 
 def test_ui_proposals_no_autosend(tmp_path: Path) -> None:

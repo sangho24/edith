@@ -210,6 +210,8 @@ def test_ui_approve_bad_input(home: Path) -> None:
     client = TestClient(make_app(edith_home=home, secret=SECRET))
     assert client.post("/ui/approve", json={"id": "x"}).status_code == 400
     assert client.post("/ui/approve", json={"decision": "yes"}).status_code == 400
+    assert client.post("/ui/approve", json=["not", "object"]).status_code == 400
+    assert client.post("/ui/approve", json={"id": 1, "decision": "yes"}).status_code == 400
 
 
 def test_ui_approve_unknown_id(home: Path) -> None:

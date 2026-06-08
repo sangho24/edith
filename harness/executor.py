@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from email.utils import getaddresses
 from pathlib import Path
 
 from harness.approval import ApprovalQueue, ApprovalRequest
@@ -34,6 +35,28 @@ class ExecutionResult:
 # ── action_type별 executor ───────────────────────────────────────────────
 
 
+def _required_str(params: dict, key: str) -> str:
+    value = params.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"params.{key} must be a non-empty string")
+    return value.strip()
+
+
+def _validate_email_recipients(to: str) -> None:
+    addresses = getaddresses([to])
+    if not addresses:
+        raise ValueError("params.to must contain at least one email address")
+    for _name, addr in addresses:
+        if "@" not in addr or addr.startswith("@") or addr.endswith("@"):
+            raise ValueError("params.to must contain valid email address(es)")
+
+
+def _validate_cron(cron: str) -> None:
+    parts = cron.split()
+    if len(parts) != 5 or any("\n" in p or "\r" in p for p in parts):
+        raise ValueError("params.new_cron must be a 5-field cron expression")
+
+
 def _exec_github_workflow_update_cron(
     req: ApprovalRequest, edith_home: Path
 ) -> ExecutionResult:
@@ -45,16 +68,21 @@ def _exec_github_workflow_update_cron(
     from harness.integrations.github_workflow import set_cron
 
     params = req.params
-    raw_path = params.get("workflow_path")
-    new_cron = params.get("new_cron")
-    if not raw_path or not new_cron:
-        return ExecutionResult(ok=False, error="params에 workflow_path·new_cron 필요")
+    try:
+        raw_path = _required_str(params, "workflow_path")
+        new_cron = _required_str(params, "new_cron")
+        _validate_cron(new_cron)
+        idx = params.get("idx", 0)
+        if not isinstance(idx, int) or isinstance(idx, bool):
+            raise ValueError("params.idx must be an int")
+    except ValueError as e:
+        return ExecutionResult(ok=False, error=str(e))
 
     wf_path = Path(raw_path)
     if not wf_path.is_absolute():
         wf_path = edith_home / wf_path
 
-    ok, detail = set_cron(wf_path, new_cron, int(params.get("idx", 0)))
+    ok, detail = set_cron(wf_path, new_cron, idx)
     return ExecutionResult(ok=ok, detail=detail, error="" if ok else detail)
 
 
@@ -63,9 +91,13 @@ def _exec_gmail_send(req: ApprovalRequest, edith_home: Path) -> ExecutionResult:
     from harness.integrations.gmail import GmailSource
 
     params = req.params
-    to, subject, body = params.get("to"), params.get("subject"), params.get("body")
-    if not to or subject is None or body is None:
-        return ExecutionResult(ok=False, error="params에 to·subject·body 필요")
+    try:
+        to = _required_str(params, "to")
+        subject = _required_str(params, "subject")
+        body = _required_str(params, "body")
+        _validate_email_recipients(to)
+    except ValueError as e:
+        return ExecutionResult(ok=False, error=str(e))
 
     resp = GmailSource().send_message(to=to, subject=subject, body=body)
     return ExecutionResult(ok=True, detail=f"sent id={resp.get('id', '?')}")
