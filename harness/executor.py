@@ -43,13 +43,13 @@ def _required_str(params: dict, key: str) -> str:
     return value.strip()
 
 
-def _validate_email_recipients(to: str) -> None:
-    addresses = getaddresses([to])
+def _validate_email_recipients(value: str, *, field: str = "params.to") -> None:
+    addresses = getaddresses([value])
     if not addresses:
-        raise ValueError("params.to must contain at least one email address")
+        raise ValueError(f"{field} must contain at least one email address")
     for _name, addr in addresses:
         if "@" not in addr or addr.startswith("@") or addr.endswith("@"):
-            raise ValueError("params.to must contain valid email address(es)")
+            raise ValueError(f"{field} must contain valid email address(es)")
 
 
 def _validate_cron(cron: str) -> None:
@@ -135,6 +135,8 @@ def _exec_calendar_create(req: ApprovalRequest, edith_home: Path) -> ExecutionRe
             raise ValueError("params.location must be a string")
         if not isinstance(attendees, list) or any(not isinstance(a, str) for a in attendees):
             raise ValueError("params.attendees must be a list of strings")
+        for attendee in attendees:
+            _validate_email_recipients(attendee, field="params.attendees")
         if not isinstance(calendar_id, str) or not calendar_id.strip():
             raise ValueError("params.calendar_id must be a non-empty string")
         if timezone is not None and not isinstance(timezone, str):

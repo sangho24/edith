@@ -347,7 +347,30 @@ def test_health_nudge_when_short_sleep() -> None:
     out = health_suggestions({"sleep": 300.0}, "morning", _NOW)
     assert len(out) == 1
     assert out[0].category == "health"
+    assert out[0].signal_key == "health::2026-05-29"
     assert out[0].action_hint is None  # 건강은 nudge만, 대행 금지
+
+
+def test_health_category_reject_suppresses_future_health_nudges(edith_home: Path) -> None:
+    old_reject_1 = "2026-05-17T08:00:00+00:00"
+    old_reject_2 = "2026-05-18T08:00:00+00:00"
+    record_feedback(edith_home, "health::2026-05-17", "rejected", now_iso=old_reject_1)
+    record_feedback(edith_home, "health::2026-05-18", "rejected", now_iso=old_reject_2)
+
+    from harness.initiative import _apply_suppression_gate, _load_feedback
+
+    cands = health_suggestions({"sleep": 300.0}, "morning", WEEKDAY_ISO)
+    kept, suppressed = _apply_suppression_gate(
+        cands,
+        _load_feedback(edith_home),
+        WEEKDAY_ISO,
+        7,
+    )
+
+    assert cands[0].category == "health"
+    assert cands[0].signal_key == "health::2026-05-27"
+    assert kept == []
+    assert suppressed == 1
 
 
 def test_health_none_when_enough_or_missing() -> None:

@@ -305,6 +305,25 @@ def test_calendar_create_executor_rejects_bad_times(tmp_path: Path) -> None:
     assert "after" in result.error
 
 
+def test_calendar_create_executor_rejects_invalid_attendee_email(tmp_path: Path) -> None:
+    req = type(
+        "R",
+        (),
+        {
+            "params": {
+                "summary": "x",
+                "start": "2026-06-09T10:00:00+09:00",
+                "end": "2026-06-09T10:30:00+09:00",
+                "attendees": ["not-an-email"],
+            }
+        },
+    )()
+    result = _exec_calendar_create(req, tmp_path)  # type: ignore[arg-type]
+    assert not result.ok
+    assert "params.attendees" in result.error
+    assert "email" in result.error
+
+
 def test_default_registry_has_known_actions() -> None:
     reg = default_registry()
     assert "github_workflow_update_cron" in reg

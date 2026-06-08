@@ -304,7 +304,7 @@ def health_suggestions(health: dict, slot: str, now_iso: str) -> list[Suggestion
             scope="personal",
             title=f"수면 부족: 어젯밤 {hours:.1f}h",
             why=f"수면 {int(sleep)}분 (<{int(HEALTH_SLEEP_MIN_MINUTES)}분). 컨디션 주의",
-            signal_key=f"health_sleep::{now_iso[:10]}",
+            signal_key=f"health::{now_iso[:10]}",
             score=HEALTH_SCORE,
             action_hint=None,  # nudge only — 건강은 Edith가 대행할 대상 아님
             created_at=now_iso,
