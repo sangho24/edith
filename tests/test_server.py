@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,7 @@ def _isolate_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
     monkeypatch.delenv("TELEGRAM_CHAT_ID", raising=False)
     monkeypatch.delenv("RELAY_SECRET", raising=False)
+    monkeypatch.delenv("EDITH_GUI_TOKEN", raising=False)
 
 
 def _sign(body: bytes, secret: str = SECRET) -> str:
@@ -59,6 +61,14 @@ def test_health_basic(tmp_path: Path) -> None:
     assert data["telegram_configured"] is False
 
 
+def test_gui_token_missing_logs_bind_warning(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.WARNING, logger="harness.server"):
+        make_app(edith_home=tmp_path, secret=SECRET)
+    assert "⚠️ EDITH_GUI_TOKEN 미설정 — 127.0.0.1 바인드 권장" in caplog.text
+
+
 # ── /ask ───────────────────────────────────────────────────────────────
 
 
@@ -83,6 +93,38 @@ def test_ask_internal_no_signature_required(tmp_path: Path) -> None:
     data = resp.json()
     assert data["ok"]
     assert data["answer"] == "echoed: 안녕"
+
+
+def test_ask_without_gui_token_env_keeps_existing_behavior(tmp_path: Path) -> None:
+    app = make_app(edith_home=tmp_path, secret=SECRET, runner=_fake_run)
+    client = TestClient(app)
+    resp = client.post("/ask", json={"q": "토큰 없이"})
+    assert resp.status_code == 200
+
+
+def test_gui_token_required_for_ask_when_configured(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("EDITH_GUI_TOKEN", "gui-secret")
+    app = make_app(edith_home=tmp_path, secret=SECRET, runner=_fake_run)
+    client = TestClient(app)
+
+    assert client.post("/ask", json={"q": "hi"}).status_code == 401
+    resp = client.post("/ask", json={"q": "hi"}, headers={"X-Edith-Token": "gui-secret"})
+    assert resp.status_code == 200
+
+
+def test_gui_token_required_for_ui_when_configured(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("EDITH_GUI_TOKEN", "gui-secret")
+    (tmp_path / "harness" / "traces").mkdir(parents=True)
+    app = make_app(edith_home=tmp_path, secret=SECRET, runner=_fake_run)
+    client = TestClient(app)
+
+    assert client.get("/ui/traces").status_code == 401
+    resp = client.get("/ui/traces", headers={"X-Edith-Token": "gui-secret"})
+    assert resp.status_code == 200
 
 
 def test_ask_with_valid_signature(tmp_path: Path) -> None:
@@ -175,6 +217,30 @@ def test_telegram_webhook_runs_and_replies(tmp_path: Path) -> None:
     chat_id, text = fake_tg.sent[0]
     assert chat_id == 8623533988
     assert "echoed: 오늘 일정" in text
+
+
+def test_telegram_webhook_ignores_gui_token_and_uses_hmac(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("EDITH_GUI_TOKEN", "gui-secret")
+    fake_tg = FakeTelegramClient()
+    app = make_app(
+        edith_home=tmp_path,
+        secret=SECRET,
+        runner=_fake_run,
+        telegram_client=fake_tg,
+    )
+    client = TestClient(app)
+
+    payload = {"update_id": 1, "message": {"chat": {"id": 1}, "text": "hi"}}
+    body = json.dumps(payload).encode()
+    resp = client.post(
+        "/webhook/telegram",
+        content=body,
+        headers={"X-Relay-Signature": _sign(body)},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["answered"]
 
 
 def test_telegram_webhook_start_command(tmp_path: Path) -> None:

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import os
 from pathlib import Path
 from typing import Any
@@ -124,6 +125,8 @@ except ImportError as e:  # pragma: no cover
     raise RuntimeError("fastapi 필요. uv pip install fastapi uvicorn") from e
 
 _WEBUI_INDEX = Path(__file__).resolve().parent / "webui" / "index.html"
+_GUI_TOKEN_COOKIE_NAMES = ("edith_gui_token", "EDITH_GUI_TOKEN")
+_LOG = logging.getLogger(__name__)
 
 # 대화(/ask) 모드에서만 붙이는 system 지침 — 맥락 이어받기 + 능동적 도구 사용.
 _CHAT_SUFFIX = (
@@ -208,6 +211,23 @@ def make_app(
     channel = TelegramChannel(telegram_client) if telegram_client is not None else None
 
     app = FastAPI(title="Edith Home Hub Server")
+    gui_token = os.environ.get("EDITH_GUI_TOKEN", "")
+    if not gui_token:
+        _LOG.warning("⚠️ EDITH_GUI_TOKEN 미설정 — 127.0.0.1 바인드 권장")
+
+    @app.middleware("http")
+    async def _gui_token_middleware(request: Request, call_next: Any) -> Any:
+        path = request.url.path
+        if gui_token and (path == "/ask" or path.startswith("/ui/")):
+            given = request.headers.get("X-Edith-Token")
+            if given is None:
+                for name in _GUI_TOKEN_COOKIE_NAMES:
+                    given = request.cookies.get(name)
+                    if given is not None:
+                        break
+            if given is None or not hmac.compare_digest(given, gui_token):
+                return JSONResponse({"detail": "invalid edith gui token"}, status_code=401)
+        return await call_next(request)
 
     # 실 Gmail/Calendar 호출이 무거워서(메일 50건 fetch ~수초) brief를 90s 캐시.
     # /ui/brief·/ui/summary가 공유. 앱 인스턴스별 캐시라 테스트 격리 안전.

@@ -276,6 +276,24 @@
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const TOKEN_KEY = "edith_gui_token";
+
+function authHeaders(headers = {}) {
+  const out = { ...headers };
+  const token = localStorage.getItem(TOKEN_KEY);
+  if (token) out["X-Edith-Token"] = token;
+  return out;
+}
+
+async function authFetch(url, options = {}, retried = false) {
+  const opts = { ...options, headers: authHeaders(options.headers || {}) };
+  const resp = await fetch(url, opts);
+  if (resp.status !== 401 || retried) return resp;
+  const token = prompt("Edith GUI 토큰을 입력하세요");
+  if (!token) return resp;
+  localStorage.setItem(TOKEN_KEY, token);
+  return authFetch(url, options, true);
+}
 
 let current = "home";
 document.querySelectorAll("#nav a").forEach((a) => { a.onclick = () => switchView(a.dataset.view); });
@@ -293,7 +311,7 @@ function switchView(v) {
 
 async function loadSummary() {
   let d;
-  try { d = await (await fetch("/ui/summary")).json(); }
+  try { d = await (await authFetch("/ui/summary")).json(); }
   catch (e) { $("#home-sub").textContent = "요약 불러오기 실패: " + e; return; }
   if (!d.ok) { $("#home-sub").textContent = "요약 오류: " + (d.error || "?"); return; }
   $("#home-sub").textContent = d.date || ""; $("#topdate").textContent = d.date || "";
@@ -340,7 +358,7 @@ async function send() {
   const pending = addMsg("Edith", "…");
   const history = convo.slice(-8);
   try {
-    const r = await fetch("/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ q, history }) });
+    const r = await authFetch("/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ q, history }) });
     const d = await r.json();
     const answer = d.ok ? (d.answer || "(응답 없음)") : ("오류: " + (d.error || r.status));
     pending.querySelector(".body").textContent = answer;
@@ -362,7 +380,7 @@ input.addEventListener("keydown", (e) => {
 });
 
 async function loadBrief() {
-  try { const d = await (await fetch("/ui/brief")).json(); $("#brief").textContent = d.text || "(브리프 없음)"; }
+  try { const d = await (await authFetch("/ui/brief")).json(); $("#brief").textContent = d.text || "(브리프 없음)"; }
   catch (e) { $("#brief").textContent = "불러오기 실패: " + e; }
 }
 
@@ -370,7 +388,7 @@ function riskChip(s) { return s >= 6 ? "chip" : s >= 4 ? "chip mid" : "chip low"
 async function loadProposals() {
   const el = $("#proposals"); el.innerHTML = "";
   let d;
-  try { d = await (await fetch("/ui/proposals")).json(); }
+  try { d = await (await authFetch("/ui/proposals")).json(); }
   catch (e) { el.innerHTML = `<div class="empty">불러오기 실패: ${esc(e)}</div>`; return; }
   if (!d.proposals || !d.proposals.length) { el.innerHTML = `<div class="empty">대기 중인 제안이 없습니다</div>`; return; }
   for (const p of d.proposals) {
@@ -399,7 +417,7 @@ async function loadProposals() {
 async function decideProposal(id, decision, accepted_steps) {
   try {
     const body = { id, decision }; if (accepted_steps) body.accepted_steps = accepted_steps;
-    const d = await (await fetch("/ui/proposals/decide", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).json();
+    const d = await (await authFetch("/ui/proposals/decide", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).json();
     if (!d.ok) alert("실패: " + (d.error || "?"));
     else if (decision === "accept") alert(`✓ ${(d.queued_approvals || []).length}개 step이 승인 큐로 — 승인 탭에서 실행하세요.`);
   } catch (e) { alert("네트워크 오류: " + e); }
@@ -409,7 +427,7 @@ async function decideProposal(id, decision, accepted_steps) {
 async function loadApprovals() {
   const el = $("#approvals"); el.innerHTML = "";
   let d;
-  try { d = await (await fetch("/ui/approvals")).json(); }
+  try { d = await (await authFetch("/ui/approvals")).json(); }
   catch (e) { el.innerHTML = `<div class="empty">불러오기 실패: ${esc(e)}</div>`; return; }
   if (!d.approvals || !d.approvals.length) { el.innerHTML = `<div class="empty">대기 중인 승인 요청이 없습니다</div>`; return; }
   for (const a of d.approvals) {
@@ -427,7 +445,7 @@ async function loadApprovals() {
 }
 async function decide(id, decision) {
   try {
-    const d = await (await fetch("/ui/approve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, decision }) })).json();
+    const d = await (await authFetch("/ui/approve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, decision }) })).json();
     if (!d.ok) alert("실패: " + (d.error || "?"));
     else if (decision === "yes" && d.execution)
       alert(d.execution.ok ? "✓ 실행됨 — " + (d.execution.detail || "완료") : "승인됐으나 실행 실패 — " + (d.execution.error || "?"));
@@ -438,7 +456,7 @@ async function decide(id, decision) {
 async function loadTraces() {
   const el = $("#traces");
   try {
-    const d = await (await fetch("/ui/traces")).json();
+    const d = await (await authFetch("/ui/traces")).json();
     if (!d.traces || !d.traces.length) { el.innerHTML = `<div class="muted">활동 기록 없음</div>`; return; }
     el.innerHTML = d.traces.map((t) =>
       `<div class="trow"><span class="tk">${t.cost_tokens} tok</span>
@@ -448,7 +466,7 @@ async function loadTraces() {
 }
 async function loadUsage() {
   try {
-    const d = await (await fetch("/ui/traces")).json();
+    const d = await (await authFetch("/ui/traces")).json();
     const ts = d.traces || [];
     $("#u-tok").textContent = ts.reduce((s, t) => s + (t.cost_tokens || 0), 0).toLocaleString();
     $("#u-runs").textContent = `${ts.length} runs`;
@@ -457,7 +475,7 @@ async function loadUsage() {
 
 (async () => {
   try {
-    const h = await (await fetch("/health")).json();
+    const h = await (await authFetch("/health")).json();
     $("#led").classList.toggle("ok", !!h.ok);
     $("#status").textContent = h.ok ? (h.telegram_configured ? "텔레그램 연결됨" : "온라인") : "오프라인";
   } catch { $("#status").textContent = "오프라인"; }
