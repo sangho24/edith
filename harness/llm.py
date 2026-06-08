@@ -29,6 +29,11 @@ def _max_output_tokens() -> int:
         return 2048
 
 
+def _model_env(provider_key: str, default: str) -> str:
+    """Common GUI model override first, provider-specific env second."""
+    return os.environ.get("EDITH_MODEL") or os.environ.get(provider_key, default)
+
+
 @dataclass
 class LLMResponse:
     """LLM 호출 응답. stop_reason은 anthropic SDK 값 형식.
@@ -73,7 +78,7 @@ class AnthropicLLM:
 
     def __init__(
         self,
-        model: str = "claude-sonnet-4-6",
+        model: str | None = None,
         api_key: str | None = None,
     ) -> None:
         try:
@@ -84,7 +89,7 @@ class AnthropicLLM:
         key = api_key or os.environ.get("ANTHROPIC_API_KEY")
         if not key:
             raise RuntimeError("ANTHROPIC_API_KEY 환경변수 없음. .env 파일 또는 export 필요.")
-        self.model = model
+        self.model = model or _model_env("ANTHROPIC_MODEL", "claude-sonnet-4-6")
         self.client = Anthropic(api_key=key)
 
     def call(
@@ -282,7 +287,7 @@ class GrokLLM:
         key = api_key or os.environ.get("XAI_API_KEY")
         if not key:
             raise RuntimeError("XAI_API_KEY 환경변수 없음. .env 파일 또는 export 필요.")
-        self.model = model or os.environ.get("XAI_MODEL_FAST", "grok-4-fast")
+        self.model = model or _model_env("XAI_MODEL_FAST", "grok-4-fast")
         self.client = OpenAI(api_key=key, base_url=base_url)
 
     def call(
@@ -331,7 +336,7 @@ class GeminiLLM:
         key = api_key or os.environ.get("GEMINI_API_KEY")
         if not key:
             raise RuntimeError("GEMINI_API_KEY 환경변수 없음. .env 파일 또는 export 필요.")
-        self.model = model or os.environ.get("GEMINI_MODEL_FAST", "gemini-2.5-flash")
+        self.model = model or _model_env("GEMINI_MODEL_FAST", "gemini-2.5-flash")
         # max_retries 5 — Gemini Free tier 의 5 RPM 한도 자동 처리.
         # OpenAI SDK 가 retry-after 헤더 honor 하면서 exponential backoff.
         self.client = OpenAI(api_key=key, base_url=base_url, max_retries=max_retries)
@@ -386,9 +391,7 @@ class GroqCloudLLM:
         key = api_key or os.environ.get("GROQ_API_KEY")
         if not key:
             raise RuntimeError("GROQ_API_KEY 환경변수 없음. .env 파일 또는 export 필요.")
-        self.model = model or os.environ.get(
-            "GROQ_MODEL_FAST", "llama-3.3-70b-versatile"
-        )
+        self.model = model or _model_env("GROQ_MODEL_FAST", "llama-3.3-70b-versatile")
         self.client = OpenAI(api_key=key, base_url=base_url, max_retries=max_retries)
 
     def call(

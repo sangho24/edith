@@ -190,6 +190,24 @@
     border-radius: var(--r-md); padding: 10px 12px; margin: 8px 0;
     font: 12px/1.5 ui-monospace, Menlo, monospace; letter-spacing: 0;
   }
+  .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 12px; color: var(--muted); font-weight: 700; }
+  .field input, .field select {
+    width: 100%; border: 1px solid var(--glass-line); border-radius: var(--r-sm);
+    background: rgba(255,255,255,.62); color: var(--ink); padding: 10px 11px;
+    font: 14px/1.2 var(--sans);
+  }
+  .field input:focus, .field select:focus { outline: 2px solid rgba(31,157,95,.22); }
+  .secret-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  .secret-pill {
+    font-size: 12px; font-weight: 700; color: var(--muted);
+    border: 1px solid var(--glass-line); border-radius: var(--pill);
+    background: rgba(255,255,255,.52); padding: 5px 10px;
+  }
+  .secret-pill.ok { color: var(--green-ink); background: var(--green-soft); }
+  .settings-actions { display: flex; align-items: center; gap: 10px; margin-top: 18px; }
+  .save-state { font-size: 12px; color: var(--muted); }
   .empty { color: var(--muted2); padding: 28px 0; text-align: center; font-size: 14px; }
   .trow { display: flex; gap: 12px; align-items: center; padding: 11px 0; border-bottom: 1px solid var(--hairline); font-size: 13px; }
   .trow:last-child { border-bottom: 0; }
@@ -211,6 +229,7 @@
       <a data-view="proposals"><span class="ic">📋</span> 제안 <span class="badge" id="b-prop"></span></a>
       <a data-view="approvals"><span class="ic">✅</span> 승인 <span class="badge" id="b-appr"></span></a>
       <a data-view="activity"><span class="ic">📈</span> 활동</a>
+      <a data-view="settings"><span class="ic">⚙️</span> 설정</a>
     </nav>
     <div class="usage">
       <div class="lbl">토큰 사용 (최근)</div>
@@ -268,6 +287,55 @@
         <button class="btn btn-ghost reload" onclick="loadTraces()">↻ 새로고침</button>
         <div class="card" id="traces"><div class="muted">불러오는 중…</div></div>
       </section>
+
+      <section class="view" id="view-settings">
+        <button class="btn btn-ghost reload" onclick="loadSettings()">↻ 새로고침</button>
+        <div class="card">
+          <div class="form-grid">
+            <div class="field">
+              <label for="set-llm">EDITH_LLM</label>
+              <select id="set-llm">
+                <option value=""></option>
+                <option value="mock">mock</option>
+                <option value="gemini">gemini</option>
+                <option value="groq">groq</option>
+                <option value="grok">grok</option>
+                <option value="anthropic">anthropic</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="set-model">model</label>
+              <input id="set-model" autocomplete="off" />
+            </div>
+            <div class="field">
+              <label for="set-mail">EDITH_MAIL_BACKEND</label>
+              <select id="set-mail">
+                <option value=""></option>
+                <option value="local">local</option>
+                <option value="gmail">gmail</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="set-calendar">EDITH_CALENDAR_BACKEND</label>
+              <select id="set-calendar">
+                <option value=""></option>
+                <option value="local">local</option>
+                <option value="apple">apple</option>
+                <option value="google">google</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="set-tokens">EDITH_MAX_TOKENS</label>
+              <input id="set-tokens" type="number" min="128" max="32768" step="128" />
+            </div>
+          </div>
+          <div class="secret-grid" id="secret-state"></div>
+          <div class="settings-actions">
+            <button class="btn btn-primary" id="save-settings">저장</button>
+            <span class="save-state" id="settings-state"></span>
+          </div>
+        </div>
+      </section>
     </main>
   </div>
 </div>
@@ -306,6 +374,7 @@ function switchView(v) {
   if (v === "proposals") loadProposals();
   if (v === "approvals") loadApprovals();
   if (v === "activity") loadTraces();
+  if (v === "settings") loadSettings();
   if (v === "chat") $("#input").focus();
 }
 
@@ -464,6 +533,41 @@ async function loadTraces() {
        <span class="tf">${esc(t.finalize_reason || "-")} · ${t.n_steps}st${t.n_blocked ? " · " + t.n_blocked + "blk" : ""}</span></div>`).join("");
   } catch (e) { el.innerHTML = `<div class="muted">불러오기 실패: ${esc(e)}</div>`; }
 }
+async function loadSettings() {
+  $("#settings-state").textContent = "";
+  try {
+    const d = await (await authFetch("/ui/settings")).json();
+    const s = d.settings || {};
+    $("#set-llm").value = s.EDITH_LLM || "";
+    $("#set-model").value = s.model || "";
+    $("#set-mail").value = s.EDITH_MAIL_BACKEND || "";
+    $("#set-calendar").value = s.EDITH_CALENDAR_BACKEND || "";
+    $("#set-tokens").value = s.EDITH_MAX_TOKENS || "";
+    const secrets = d.secrets || {};
+    $("#secret-state").innerHTML = Object.entries(secrets).map(([k, ok]) =>
+      `<span class="secret-pill ${ok ? "ok" : ""}">${esc(k)} ${ok ? "설정됨" : "없음"}</span>`).join("");
+  } catch (e) { $("#settings-state").textContent = "불러오기 실패: " + e; }
+}
+async function saveSettings() {
+  $("#settings-state").textContent = "저장 중…";
+  const body = {
+    EDITH_LLM: $("#set-llm").value,
+    model: $("#set-model").value,
+    EDITH_MAIL_BACKEND: $("#set-mail").value,
+    EDITH_CALENDAR_BACKEND: $("#set-calendar").value,
+    EDITH_MAX_TOKENS: $("#set-tokens").value,
+  };
+  try {
+    const r = await authFetch("/ui/settings", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+    });
+    const d = await r.json();
+    if (!d.ok) { $("#settings-state").textContent = "저장 실패: " + (d.detail || d.error || r.status); return; }
+    $("#settings-state").textContent = "저장됨";
+    loadSettings();
+  } catch (e) { $("#settings-state").textContent = "저장 실패: " + e; }
+}
+$("#save-settings").onclick = saveSettings;
 async function loadUsage() {
   try {
     const d = await (await authFetch("/ui/traces")).json();

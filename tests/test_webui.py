@@ -26,6 +26,13 @@ def _isolate_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("EDITH_CALENDAR_FIXTURE", raising=False)
     monkeypatch.delenv("EDITH_MAIL_FIXTURE", raising=False)
     monkeypatch.delenv("EDITH_DS_DIGEST_LATEST", raising=False)
+    monkeypatch.delenv("EDITH_LLM", raising=False)
+    monkeypatch.delenv("EDITH_MODEL", raising=False)
+    monkeypatch.delenv("EDITH_MAX_TOKENS", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("XAI_API_KEY", raising=False)
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
 
 
 @pytest.fixture
@@ -47,6 +54,9 @@ def test_webui_serves_html(home: Path) -> None:
     body = resp.text
     assert "Edith" in body
     assert "Chat" in body and "Brief" in body and "Traces" in body
+    assert "view-settings" in body
+    assert "/ui/settings" in body
+    assert "secret-state" in body
 
 
 # ── GET /ui/brief ───────────────────────────────────────────────────────
@@ -132,6 +142,62 @@ def test_ui_traces_lists_summaries(home: Path) -> None:
     assert t["scope"] == "personal"
     assert t["cost_tokens"] == 123
     assert t["finalize_reason"] == "end_turn"
+
+
+# ── /ui/settings ───────────────────────────────────────────────────────
+
+
+def test_ui_settings_get_hides_secret_values(
+    home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GEMINI_API_KEY", "secret-gemini-key")
+    client = TestClient(make_app(edith_home=home, secret=SECRET))
+
+    resp = client.get("/ui/settings")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is True
+    assert data["secrets"]["GEMINI_API_KEY"] is True
+    assert "secret-gemini-key" not in resp.text
+    assert "GEMINI_API_KEY" not in data["settings"]
+
+
+def test_ui_settings_post_persists_and_applies(home: Path) -> None:
+    client = TestClient(make_app(edith_home=home, secret=SECRET))
+
+    resp = client.post(
+        "/ui/settings",
+        json={
+            "EDITH_LLM": "gemini",
+            "model": "gemini-2.5-flash-lite",
+            "EDITH_MAIL_BACKEND": "gmail",
+            "EDITH_CALENDAR_BACKEND": "google",
+            "EDITH_MAX_TOKENS": 1024,
+        },
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    settings = data["settings"]
+    assert settings["EDITH_LLM"] == "gemini"
+    assert settings["model"] == "gemini-2.5-flash-lite"
+    assert settings["EDITH_MAIL_BACKEND"] == "gmail"
+    assert settings["EDITH_CALENDAR_BACKEND"] == "google"
+    assert settings["EDITH_MAX_TOKENS"] == "1024"
+    saved = json.loads((home / "harness" / "settings.json").read_text(encoding="utf-8"))
+    assert saved["model"] == "gemini-2.5-flash-lite"
+    assert saved["EDITH_MAX_TOKENS"] == "1024"
+
+    again = client.get("/ui/settings").json()["settings"]
+    assert again["model"] == "gemini-2.5-flash-lite"
+
+
+def test_ui_settings_post_rejects_secret_values(home: Path) -> None:
+    client = TestClient(make_app(edith_home=home, secret=SECRET))
+    resp = client.post("/ui/settings", json={"GEMINI_API_KEY": "do-not-store"})
+    assert resp.status_code == 400
+    assert not (home / "harness" / "settings.json").exists()
 
 
 # ── /ui/approvals · /ui/approve ─────────────────────────────────────────

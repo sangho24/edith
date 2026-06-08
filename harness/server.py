@@ -229,6 +229,9 @@ def make_app(
     telegram_client: TelegramClient 인스턴스. None 이면 webhook 응답만 큐잉.
     """
     home = edith_home or Path(os.environ.get("EDITH_HOME", str(Path.home() / "edith")))
+    from harness.settings import load_and_apply_settings
+
+    load_and_apply_settings(home)
     # ⚠️ 명시적 None 체크 — secret="" 은 dev 모드 의도. env leak 방지.
     if secret is None:
         secret = os.environ.get("RELAY_SECRET", "")
@@ -393,6 +396,32 @@ def make_app(
                 for s in reversed(summaries)
             ],
         }
+
+    @app.get("/ui/settings")
+    def ui_settings() -> dict[str, Any]:
+        """현재 GUI 편집 가능 설정. API 키 값은 절대 반환하지 않는다."""
+        from harness.settings import public_settings
+
+        return public_settings(home)
+
+    @app.post("/ui/settings")
+    async def ui_settings_update(request: Request) -> JSONResponse:
+        """런타임 설정 저장. secrets/API key 값은 받거나 반환하지 않는다."""
+        from harness.settings import parse_settings_update, save_settings
+
+        payload = await _json_object(request)
+        secret_like = [
+            key
+            for key in payload
+            if key.upper().endswith("_API_KEY") or key.upper().endswith("_TOKEN")
+        ]
+        if secret_like:
+            raise HTTPException(status_code=400, detail="secret values are not accepted here")
+        try:
+            update = parse_settings_update(payload)
+            return JSONResponse(save_settings(home, update))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
 
     def _approval_queue() -> Any:
         from harness.approval import ApprovalQueue
