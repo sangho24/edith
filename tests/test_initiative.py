@@ -22,6 +22,7 @@ from harness.initiative import (
     digest_suggestions,
     health_suggestions,
     is_atrophy_protected,
+    learn_suppression_preferences,
     preview_checkin,
     reading_suggestions,
     record_feedback,
@@ -241,6 +242,61 @@ def test_run_checkin_old_rejection_not_suppressed(edith_home: Path) -> None:
     out = run_checkin(edith_home, "morning", now_iso=WEEKDAY_ISO)
     assert out["suppressed_n"] == 0
     assert len(out["pushed"]) == 1
+
+
+def test_learn_suppression_preferences_counts_rejects_only() -> None:
+    feedback = [
+        {
+            "signal_key": "urgent_mail::A",
+            "category": "urgent_mail",
+            "status": "rejected",
+            "at": "2026-05-01T08:00:00+00:00",
+        },
+        {
+            "signal_key": "urgent_mail::A",
+            "category": "urgent_mail",
+            "status": "rejected",
+            "at": "2026-05-02T08:00:00+00:00",
+        },
+        {
+            "signal_key": "urgent_mail::B",
+            "category": "urgent_mail",
+            "status": "accepted",
+            "at": "2026-05-03T08:00:00+00:00",
+        },
+    ]
+
+    learned = learn_suppression_preferences(feedback, base_days=7)
+
+    assert learned["category_counts"] == {"urgent_mail": 2}
+    assert learned["signal_counts"] == {"urgent_mail::A": 2}
+    assert learned["category_days"]["urgent_mail"] == 14
+    assert learned["signal_days"]["urgent_mail::A"] == 14
+
+
+def test_repeated_category_reject_extends_suppression_strength(edith_home: Path) -> None:
+    _setup_urgent_mail(edith_home, ["긴급: 새 메일"])
+    # 10일 전 reject 2회: 기존 7일 window라면 풀리지만 category 학습 window=14일이라 억제.
+    record_feedback(
+        edith_home,
+        "urgent_mail::예전 A",
+        "rejected",
+        now_iso="2026-05-17T08:00:00+00:00",
+        category="urgent_mail",
+    )
+    record_feedback(
+        edith_home,
+        "urgent_mail::예전 B",
+        "rejected",
+        now_iso="2026-05-18T08:00:00+00:00",
+        category="urgent_mail",
+    )
+
+    out = run_checkin(edith_home, "morning", now_iso=WEEKDAY_ISO)
+
+    assert out["candidates_n"] == 1
+    assert out["suppressed_n"] == 1
+    assert out["pushed"] == []
 
 
 # ── 다중 신호 generator (순수 함수, 결정적) ──

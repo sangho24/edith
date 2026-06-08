@@ -153,16 +153,20 @@ def record_feedback(
     signal_key: str,
     status: SuggestionStatus,
     now_iso: str | None = None,
+    category: str | None = None,
 ) -> None:
     """사용자 피드백을 suggestion_feedback.jsonl에 append.
 
     suppression Gate가 reject 레코드를 읽어 같은 신호의 반복 제안을 억제한다.
     """
+    clean_category = category if category else _category_from_signal(signal_key)
     rec = {
         "signal_key": signal_key,
         "status": status,
         "at": now_iso or datetime.now(UTC).isoformat(),
     }
+    if clean_category:
+        rec["category"] = clean_category
     path = _harness_dir(edith_home) / _FEEDBACK_FILE
     with path.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
@@ -463,6 +467,79 @@ def _recent_rejected_keys(
     return rejected
 
 
+def learn_suppression_preferences(
+    feedback: list[dict],
+    *,
+    base_days: int = DEFAULT_SUPPRESSION_DAYS,
+    max_days: int = 42,
+) -> dict:
+    """Aggregate reject feedback into deterministic suppression strength.
+
+    Returns category/signal reject counts plus the learned suppression window in days.
+    Non-reject feedback is ignored.
+    """
+    category_counts: dict[str, int] = {}
+    signal_counts: dict[str, int] = {}
+    for rec in feedback:
+        if rec.get("status") != "rejected":
+            continue
+        signal = rec.get("signal_key")
+        if not isinstance(signal, str) or not signal:
+            continue
+        category = rec.get("category")
+        if not isinstance(category, str) or not category:
+            category = _category_from_signal(signal)
+        signal_counts[signal] = signal_counts.get(signal, 0) + 1
+        if category:
+            category_counts[category] = category_counts.get(category, 0) + 1
+
+    return {
+        "category_counts": dict(sorted(category_counts.items())),
+        "signal_counts": dict(sorted(signal_counts.items())),
+        "category_days": {
+            k: _suppression_days_for_count(v, base_days, max_days)
+            for k, v in sorted(category_counts.items())
+        },
+        "signal_days": {
+            k: _suppression_days_for_count(v, base_days, max_days)
+            for k, v in sorted(signal_counts.items())
+        },
+    }
+
+
+def _suppression_days_for_count(count: int, base_days: int, max_days: int) -> int:
+    return min(max_days, max(base_days, base_days * max(1, count)))
+
+
+def _category_from_signal(signal_key: str) -> str:
+    return signal_key.split("::", 1)[0] if signal_key else ""
+
+
+def _recent_category_rejections(
+    feedback: list[dict], now_iso: str, learned_days: dict[str, int]
+) -> set[str]:
+    """Categories with reject history inside their learned suppression window."""
+    now_d = _parse_date(now_iso)
+    out: set[str] = set()
+    for rec in feedback:
+        if rec.get("status") != "rejected":
+            continue
+        signal = rec.get("signal_key")
+        if not isinstance(signal, str) or not signal:
+            continue
+        category = rec.get("category")
+        if not isinstance(category, str) or not category:
+            category = _category_from_signal(signal)
+        days = learned_days.get(category)
+        at = rec.get("at")
+        if not category or days is None or not isinstance(at, str):
+            continue
+        rec_d = _parse_date(at)
+        if rec_d is None or now_d is None or (now_d - rec_d).days <= days:
+            out.add(category)
+    return out
+
+
 def _apply_suppression_gate(
     suggestions: list[Suggestion],
     feedback: list[dict],
@@ -471,10 +548,19 @@ def _apply_suppression_gate(
 ) -> tuple[list[Suggestion], int]:
     """최근 reject 된 signal_key 후보 제외. (남은 후보, 억제된 수) 반환."""
     rejected = _recent_rejected_keys(feedback, now_iso, suppression_days)
+    learned = learn_suppression_preferences(feedback, base_days=suppression_days)
+    category_days = {
+        category: days
+        for category, days in learned["category_days"].items()
+        if learned["category_counts"].get(category, 0) >= 2
+    }
+    rejected_categories = _recent_category_rejections(
+        feedback, now_iso, category_days
+    )
     kept: list[Suggestion] = []
     suppressed = 0
     for s in suggestions:
-        if s.signal_key in rejected:
+        if s.signal_key in rejected or s.category in rejected_categories:
             suppressed += 1
         else:
             kept.append(s)
@@ -659,6 +745,7 @@ __all__ = [
     "digest_suggestions",
     "health_suggestions",
     "is_atrophy_protected",
+    "learn_suppression_preferences",
     "pattern_suggestions",
     "preview_checkin",
     "reading_suggestions",
