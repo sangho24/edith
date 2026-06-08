@@ -69,4 +69,5 @@ wiki/.obsidian/cache
 wiki/.obsidian/snippets/
 
 # Logs
+logs/
 *.log

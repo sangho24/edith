@@ -1,4 +1,4 @@
-.PHONY: install test run serve serve-demo seed-demo demo _free-port lint fmt typecheck eval check lock help
+.PHONY: install test run serve serve-demo seed-demo demo _free-port lint fmt typecheck eval check lock help install-morning-cron uninstall-morning-cron
 
 help:
 	@echo "make install     # uv venv + 의존성 설치 (editable)"
@@ -14,6 +14,8 @@ help:
 	@echo "make typecheck   # pyright"
 	@echo "make check       # lint + typecheck + test (CI 풀세트)"
 	@echo "make lock        # uv pip compile → requirements.lock"
+	@echo "make install-morning-cron   # 매일 09:00 morning brief push LaunchAgent 설치"
+	@echo "make uninstall-morning-cron # morning brief push LaunchAgent 제거"
 
 install:
 	uv venv
@@ -170,6 +172,30 @@ server-status:
 
 server-logs:
 	bash scripts/launchd/install.sh logs
+
+# ── PR #72 — 매일 09:00 KST morning brief push LaunchAgent ──
+
+install-morning-cron:
+	@mkdir -p "$$HOME/Library/LaunchAgents" "$(CURDIR)/logs"
+	@sed "s|__EDITH_HOME__|$(CURDIR)|g" \
+		"$(CURDIR)/scripts/launchd/com.edith.morningbrief.plist" \
+		> "$$HOME/Library/LaunchAgents/com.edith.morningbrief.plist"
+	@launchctl bootout "gui/$$(id -u)" "$$HOME/Library/LaunchAgents/com.edith.morningbrief.plist" 2>/dev/null || \
+		launchctl unload "$$HOME/Library/LaunchAgents/com.edith.morningbrief.plist" 2>/dev/null || true
+	@if launchctl bootstrap "gui/$$(id -u)" "$$HOME/Library/LaunchAgents/com.edith.morningbrief.plist" 2>/dev/null; then \
+		echo "✓ installed: $$HOME/Library/LaunchAgents/com.edith.morningbrief.plist"; \
+	else \
+		launchctl load "$$HOME/Library/LaunchAgents/com.edith.morningbrief.plist"; \
+		echo "✓ installed via launchctl load: $$HOME/Library/LaunchAgents/com.edith.morningbrief.plist"; \
+	fi
+	@echo "  schedule: 매일 09:00 로컬 타임존(KST)"
+	@echo "  logs: $(CURDIR)/logs/morning_push.log"
+
+uninstall-morning-cron:
+	@launchctl bootout "gui/$$(id -u)" "$$HOME/Library/LaunchAgents/com.edith.morningbrief.plist" 2>/dev/null || \
+		launchctl unload "$$HOME/Library/LaunchAgents/com.edith.morningbrief.plist" 2>/dev/null || true
+	@rm -f "$$HOME/Library/LaunchAgents/com.edith.morningbrief.plist"
+	@echo "✓ uninstalled morning brief LaunchAgent"
 
 check: lint typecheck test
 	@echo ""

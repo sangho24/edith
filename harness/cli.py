@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import click
 
@@ -245,69 +245,112 @@ def mail(fixture: str | None, limit: int) -> None:
     click.echo(render_triage(items))
 
 
+_PUSH_CHANNEL_NAMES = ("kakao", "email", "osnotify")
+
+
+def _parse_push_channels(push: str) -> list[str]:
+    channels = [part.strip().lower() for part in push.split(",")]
+    channels = [name for name in channels if name]
+    if not channels:
+        raise click.BadParameter("empty push channel list")
+
+    unknown = [name for name in channels if name not in _PUSH_CHANNEL_NAMES]
+    if unknown:
+        allowed = ",".join(_PUSH_CHANNEL_NAMES)
+        raise click.BadParameter(
+            f"unknown push channel: {', '.join(unknown)} (allowed: {allowed})"
+        )
+    return channels
+
+
+def _push_channel_label(name: str) -> str:
+    return {
+        "kakao": "Kakao push",
+        "email": "Email push",
+        "osnotify": "OS notification",
+    }[name]
+
+
+def _send_brief_to_channel(name: str, brief_obj: Any) -> tuple[bool, dict[str, Any] | str]:
+    from harness.integrations import channel
+
+    if name == "kakao":
+        from harness.integrations.kakao import KakaoClient, format_kakao_brief_summary
+
+        payload = format_kakao_brief_summary(brief_obj)
+        res = channel.KakaoChannel(KakaoClient()).send("self", payload)
+        return True, res
+
+    payload = brief_obj.render_text()
+    if name == "email":
+        res = channel.EmailChannel().send("self", payload)
+        return True, res
+
+    if name == "osnotify":
+        res = channel.OsNotifyChannel().send("self", payload)
+        if not res.get("ok"):
+            return False, f"unsupported/failed: {res}"
+        return True, res
+
+    raise click.BadParameter(f"unknown push channel: {name}")
+
+
 @main.command()
 @click.option(
     "--push",
     default=None,
-    type=click.Choice(["kakao", "email", "osnotify"]),
-    help="요약 brief를 push 채널로 전송",
+    help="요약 brief를 push 채널로 전송 (예: email,osnotify)",
 )
 def brief(push: str | None) -> None:
     """Morning Briefing (Phase 3 F4) — 오늘 일정 + 메일 + ds-digest + Top 3."""
     from harness.localtime import edith_now
     from harness.morning import compose_brief
 
+    channels = _parse_push_channels(push) if push else []
     home = _edith_home()
     b = compose_brief(home, now=edith_now())
-    if push == "kakao":
-        from harness.integrations.channel import KakaoChannel
-        from harness.integrations.kakao import KakaoClient, format_kakao_brief_summary
+    if channels:
+        if channels == ["kakao"]:
+            from harness.integrations.kakao import format_kakao_brief_summary
 
-        text = format_kakao_brief_summary(b)
-        try:
-            res = KakaoChannel(KakaoClient()).send("self", text)
-        except RuntimeError as e:
-            click.echo(f"✗ Kakao push 실패: {e}", err=True)
-            click.echo(
-                "  설정 안내: `uv run harness oauth kakao --status` 및 docs/11_kakao_setup.md"
-            )
+            click.echo(format_kakao_brief_summary(b))
+        else:
+            click.echo(b.render_text())
+
+        results: list[tuple[str, bool, dict[str, Any] | str]] = []
+        for name in channels:
+            label = _push_channel_label(name)
+            try:
+                ok, detail = _send_brief_to_channel(name, b)
+            except RuntimeError as e:
+                ok, detail = False, str(e)
+
+            results.append((name, ok, detail))
+            if ok:
+                click.echo(f"✓ {label}: {detail}")
+            else:
+                click.echo(f"⚠ {label} 실패: {detail}", err=True)
+                if name == "kakao":
+                    click.echo(
+                        "  설정 안내: `uv run harness oauth kakao --status` 및 "
+                        "docs/11_kakao_setup.md",
+                        err=True,
+                    )
+                elif name == "email":
+                    click.echo(
+                        "  설정 안내: .env에 EDITH_NOTIFY_EMAIL=본인_주소 를 추가하고 "
+                        "`harness oauth google`로 Gmail 토큰을 준비하세요.",
+                        err=True,
+                    )
+
+        click.echo("")
+        click.echo("--- push summary ---")
+        for name, ok, detail in results:
+            mark = "✓" if ok else "✗"
+            click.echo(f"{mark} {name}: {detail}")
+
+        if not any(ok for _, ok, _ in results):
             sys.exit(1)
-        click.echo(text)
-        click.echo(f"✓ Kakao push: {res}")
-        return
-
-    if push == "email":
-        from harness.integrations.channel import EmailChannel
-
-        text = b.render_text()
-        try:
-            res = EmailChannel().send("self", text)
-        except RuntimeError as e:
-            click.echo(f"✗ Email push 실패: {e}", err=True)
-            click.echo(
-                "  설정 안내: .env에 EDITH_NOTIFY_EMAIL=본인_주소 를 추가하고 "
-                "`harness oauth google`로 Gmail 토큰을 준비하세요.",
-                err=True,
-            )
-            sys.exit(1)
-        click.echo(text)
-        click.echo(f"✓ Email push: {res}")
-        return
-
-    if push == "osnotify":
-        from harness.integrations.channel import OsNotifyChannel
-
-        text = b.render_text()
-        try:
-            res = OsNotifyChannel().send("self", text)
-        except RuntimeError as e:
-            click.echo(f"✗ OS notification 실패: {e}", err=True)
-            sys.exit(1)
-        if not res.get("ok"):
-            click.echo(f"✗ OS notification 미지원/실패: {res}", err=True)
-            sys.exit(1)
-        click.echo(text)
-        click.echo(f"✓ OS notification: {res}")
         return
 
     click.echo(b.render_text())

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  PR #72 — 매일 09:00 KST morning brief push (LaunchAgent).
+
+  설치:
+    make install-morning-cron
+
+  제거:
+    make uninstall-morning-cron
+
+  __EDITH_HOME__ placeholder는 설치 타깃이 현재 repo 경로로 치환한다.
+  launchd의 StartCalendarInterval은 로컬 타임존 기준이다. macOS가 잠자던 동안
+  놓친 calendar job은 깨어날 때 launchd가 catch-up 실행한다.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.edith.morningbrief</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>__EDITH_HOME__/scripts/morning_push.sh</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Users/sangho/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>EDITH_HOME</key>
+        <string>__EDITH_HOME__</string>
+    </dict>
+
+    <key>WorkingDirectory</key>
+    <string>__EDITH_HOME__</string>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>9</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>__EDITH_HOME__/logs/morning_push.launchd.out.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>__EDITH_HOME__/logs/morning_push.launchd.err.log</string>
+</dict>
+</plist>
