@@ -120,6 +120,19 @@
   .stat.act:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
   .stat .v.accent { color: var(--accent); }
   .section-t { font-size: 13px; font-weight: 700; color: var(--muted); margin: 26px 0 10px; }
+  .state-band {
+    display: none; margin-top: 14px; border: 1px solid var(--glass-line);
+    background: rgba(255,255,255,.5); border-radius: var(--r-md); padding: 12px 14px;
+    font-size: 13px; color: var(--muted);
+  }
+  .state-band.show { display: block; }
+  .errors { display: none; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .errors.show { display: flex; }
+  .err-badge {
+    border: 1px solid rgba(196,52,28,.16); background: var(--red-soft);
+    color: var(--red-ink); border-radius: var(--pill); padding: 5px 10px;
+    font-size: 12px; font-weight: 700;
+  }
   .list-row { display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--hairline); font-size: 14px; }
   .list-row:last-child { border-bottom: 0; }
   .list-row .badge-time { color: var(--accent); font-variant-numeric: tabular-nums; min-width: 92px; font-weight: 600; }
@@ -190,6 +203,13 @@
     border-radius: var(--r-md); padding: 10px 12px; margin: 8px 0;
     font: 12px/1.5 ui-monospace, Menlo, monospace; letter-spacing: 0;
   }
+  .loading { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; color: var(--muted2); }
+  .spinner {
+    width: 20px; height: 20px; border-radius: var(--pill);
+    border: 3px solid rgba(31,157,95,.18); border-top-color: var(--accent);
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
   .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
   .field { display: flex; flex-direction: column; gap: 6px; }
   .field label { font-size: 12px; color: var(--muted); font-weight: 700; }
@@ -216,6 +236,31 @@
   .trow .tf { font-size: 11px; color: var(--muted2); }
   ::-webkit-scrollbar { width: 9px; height: 9px; }
   ::-webkit-scrollbar-thumb { background: rgba(40,70,55,.18); border-radius: 9px; border: 2px solid transparent; background-clip: content-box; }
+  @media (max-width: 760px) {
+    body { overflow: auto; }
+    .app { min-height: 100vh; height: auto; grid-template-columns: 1fr; padding: 8px; gap: 8px; }
+    aside { position: sticky; top: 8px; z-index: 3; padding: 10px; border-radius: var(--r-md); }
+    .brand { padding: 2px 4px 8px; font-size: 18px; }
+    nav { flex-direction: row; overflow-x: auto; gap: 6px; padding-bottom: 2px; }
+    nav a { flex: 0 0 auto; padding: 8px 10px; }
+    .usage { display: none; }
+    .content { min-height: calc(100vh - 108px); }
+    .topbar { padding: 12px 14px; }
+    main { padding: 16px 12px; }
+    .view { max-width: none; }
+    .grid4, .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .card { padding: 14px; border-radius: var(--r-md); }
+    .hero h2 { font-size: 24px; }
+    .stat .v { font-size: 25px; }
+    .msg .body { max-width: 92%; }
+  }
+  @media (max-width: 420px) {
+    .grid4, .form-grid { grid-template-columns: 1fr; }
+    .topbar { align-items: flex-start; flex-direction: column; gap: 4px; }
+    .topbar .status { margin-left: 0; }
+    .composer { align-items: stretch; flex-direction: column; }
+    .composer .btn-primary { min-height: 42px; }
+  }
 </style>
 </head>
 <body>
@@ -248,13 +293,15 @@
       <section class="view on" id="view-home">
         <div class="hero">
           <h2 id="home-h">좋은 하루예요 ☀️</h2>
-          <p id="home-sub">오늘 요약을 불러오는 중…</p>
+          <p id="home-sub"></p>
         </div>
+        <div class="errors" id="home-errors"></div>
+        <div class="state-band" id="next-steps">다음 단계: Settings에서 LLM과 backend를 확인하고, 필요하면 harness doctor로 OAuth와 디렉토리 상태를 점검하세요.</div>
         <div class="grid4" id="stats"></div>
         <div class="section-t">Top 3</div>
-        <div class="card" id="top3"><div class="muted">불러오는 중…</div></div>
+        <div class="card" id="top3"><div class="loading"><span class="spinner"></span></div></div>
         <div class="section-t">오늘 일정</div>
-        <div class="card" id="agenda"><div class="muted">불러오는 중…</div></div>
+        <div class="card" id="agenda"><div class="loading"><span class="spinner"></span></div></div>
       </section>
 
       <section class="view" id="view-chat">
@@ -270,7 +317,8 @@
 
       <section class="view" id="view-brief">
         <button class="btn btn-ghost reload" onclick="loadBrief()">↻ 새로고침</button>
-        <pre class="mono" id="brief">불러오는 중…</pre>
+        <div class="errors" id="brief-errors"></div>
+        <pre class="mono" id="brief"></pre>
       </section>
 
       <section class="view" id="view-proposals">
@@ -285,7 +333,7 @@
 
       <section class="view" id="view-activity">
         <button class="btn btn-ghost reload" onclick="loadTraces()">↻ 새로고침</button>
-        <div class="card" id="traces"><div class="muted">불러오는 중…</div></div>
+        <div class="card" id="traces"><div class="loading"><span class="spinner"></span></div></div>
       </section>
 
       <section class="view" id="view-settings">
@@ -345,6 +393,7 @@ const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const TOKEN_KEY = "edith_gui_token";
+const CONVO_KEY = "edith_convo";
 
 function authHeaders(headers = {}) {
   const out = { ...headers };
@@ -381,9 +430,18 @@ function switchView(v) {
 async function loadSummary() {
   let d;
   try { d = await (await authFetch("/ui/summary")).json(); }
-  catch (e) { $("#home-sub").textContent = "요약 불러오기 실패: " + e; return; }
-  if (!d.ok) { $("#home-sub").textContent = "요약 오류: " + (d.error || "?"); return; }
+  catch (e) {
+    $("#home-sub").textContent = "요약 불러오기 실패";
+    renderErrors("#home-errors", { summary: String(e) });
+    return;
+  }
+  if (!d.ok) {
+    $("#home-sub").textContent = "요약 오류";
+    renderErrors("#home-errors", { summary: d.error || "unknown" });
+    return;
+  }
   $("#home-sub").textContent = d.date || ""; $("#topdate").textContent = d.date || "";
+  renderErrors("#home-errors", d.errors || {});
   const pr = d.mail_by_priority || {};
   const prTxt = Object.entries(pr).filter(([, v]) => v).map(([k, v]) => `${k} ${v}`).join(" · ") || "분류 없음";
   const cards = [
@@ -403,13 +461,34 @@ async function loadSummary() {
     ? ag.map((e) => { const m = String(e).match(/^(\d{2}:\d{2}-\d{2}:\d{2})\s*(.*)$/);
         return `<div class="list-row">${m ? `<span class="badge-time">${esc(m[1])}</span><span>${esc(m[2])}</span>` : esc(e)}</div>`; }).join("")
     : `<div class="muted">오늘 일정 없음</div>`;
+  const counts = [d.events_n, d.unread, d.digest_n, d.proposals, d.approvals].map((n) => Number(n || 0));
+  $("#next-steps").classList.toggle("show", counts.every((n) => n === 0) && !(d.top3 || []).length);
   setBadge("#b-prop", d.proposals); setBadge("#b-appr", d.approvals);
 }
 function setBadge(sel, n) { const el = $(sel); el.textContent = n || ""; el.classList.toggle("show", !!n); }
+function renderErrors(sel, errors) {
+  const el = $(sel);
+  const entries = Object.entries(errors || {}).filter(([, msg]) => msg);
+  el.classList.toggle("show", entries.length > 0);
+  el.innerHTML = entries.map(([src, msg]) =>
+    `<span class="err-badge">${esc(src)} 소스 오류: ${esc(msg)}</span>`).join("");
+}
 
 // ── CHAT (멀티턴 대화 맥락) ──
 let convo = [];
 const log = $("#log"), input = $("#input"), sendBtn = $("#send");
+function loadConvo() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(CONVO_KEY) || "[]");
+    convo = Array.isArray(raw) ? raw.filter((m) =>
+      m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string").slice(-40) : [];
+  } catch { convo = []; }
+}
+function saveConvo() { localStorage.setItem(CONVO_KEY, JSON.stringify(convo.slice(-40))); }
+function renderConvo() {
+  log.innerHTML = "";
+  for (const m of convo) addMsg(m.role === "user" ? "나" : "Edith", m.content);
+}
 function addMsg(who, text, meta) {
   const div = document.createElement("div");
   div.className = "msg" + (who === "나" ? " me" : "");
@@ -433,6 +512,7 @@ async function send() {
     pending.querySelector(".body").textContent = answer;
     if (d.ok) {
       convo.push({ role: "user", content: q }, { role: "assistant", content: answer });
+      saveConvo();
       pending.querySelector(".body").insertAdjacentHTML("afterend",
         `<div class="meta">steps ${d.steps} · ${d.tokens} tok · ${esc(d.trace_id || "")}</div>`);
     }
@@ -449,8 +529,15 @@ input.addEventListener("keydown", (e) => {
 });
 
 async function loadBrief() {
-  try { const d = await (await authFetch("/ui/brief")).json(); $("#brief").textContent = d.text || "(브리프 없음)"; }
-  catch (e) { $("#brief").textContent = "불러오기 실패: " + e; }
+  $("#brief").innerHTML = `<span class="loading"><span class="spinner"></span></span>`;
+  try {
+    const d = await (await authFetch("/ui/brief")).json();
+    renderErrors("#brief-errors", d.errors || {});
+    $("#brief").textContent = d.text || "(브리프 없음)";
+  } catch (e) {
+    renderErrors("#brief-errors", { brief: String(e) });
+    $("#brief").textContent = "불러오기 실패: " + e;
+  }
 }
 
 function riskChip(s) { return s >= 6 ? "chip" : s >= 4 ? "chip mid" : "chip low"; }
@@ -578,6 +665,7 @@ async function loadUsage() {
 }
 
 (async () => {
+  loadConvo(); renderConvo();
   try {
     const h = await (await authFetch("/health")).json();
     $("#led").classList.toggle("ok", !!h.ok);

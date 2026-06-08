@@ -57,6 +57,14 @@ def test_webui_serves_html(home: Path) -> None:
     assert "view-settings" in body
     assert "/ui/settings" in body
     assert "secret-state" in body
+    assert "home-errors" in body
+    assert "brief-errors" in body
+    assert "next-steps" in body
+    assert "다음 단계" in body
+    assert "class=\"spinner\"" in body
+    assert "@media (max-width: 760px)" in body
+    assert "localStorage.setItem(CONVO_KEY" in body
+    assert "edith_convo" in body
 
 
 # ── GET /ui/brief ───────────────────────────────────────────────────────
