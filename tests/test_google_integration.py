@@ -108,8 +108,13 @@ def test_load_google_credentials_refreshes_expired_token_without_flow(
         def from_client_secrets_file(cls, *_args, **_kwargs):  # noqa: ANN206, ANN002, ANN003
             raise AssertionError("OAuth flow must not run when allow_flow=False refresh works")
 
+    class FakeRefreshError(Exception):
+        pass
+
     google_mod = _module("google")
     auth_mod = _module("google.auth")
+    exceptions_mod = ModuleType("google.auth.exceptions")
+    exceptions_mod.RefreshError = FakeRefreshError  # type: ignore[attr-defined]
     transport_mod = _module("google.auth.transport")
     requests_mod = ModuleType("google.auth.transport.requests")
     requests_mod.Request = FakeRequest  # type: ignore[attr-defined]
@@ -123,6 +128,7 @@ def test_load_google_credentials_refreshes_expired_token_without_flow(
     for name, mod in {
         "google": google_mod,
         "google.auth": auth_mod,
+        "google.auth.exceptions": exceptions_mod,
         "google.auth.transport": transport_mod,
         "google.auth.transport.requests": requests_mod,
         "google.oauth2": oauth2_mod,
@@ -143,6 +149,156 @@ def test_load_google_credentials_refreshes_expired_token_without_flow(
     assert calls == ["request", "refresh"]
     saved = json.loads(token_file.read_text(encoding="utf-8"))
     assert saved["token"] == "new"
+
+
+def _install_google_mocks(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    credentials_cls: type,
+    request_cls: type,
+    flow_cls: type,
+    refresh_error_cls: type,
+) -> None:
+    google_mod = _module("google")
+    auth_mod = _module("google.auth")
+    exceptions_mod = ModuleType("google.auth.exceptions")
+    exceptions_mod.RefreshError = refresh_error_cls  # type: ignore[attr-defined]
+    transport_mod = _module("google.auth.transport")
+    requests_mod = ModuleType("google.auth.transport.requests")
+    requests_mod.Request = request_cls  # type: ignore[attr-defined]
+    oauth2_mod = _module("google.oauth2")
+    credentials_mod = ModuleType("google.oauth2.credentials")
+    credentials_mod.Credentials = credentials_cls  # type: ignore[attr-defined]
+    oauthlib_mod = _module("google_auth_oauthlib")
+    flow_mod = ModuleType("google_auth_oauthlib.flow")
+    flow_mod.InstalledAppFlow = flow_cls  # type: ignore[attr-defined]
+    for name, mod in {
+        "google": google_mod,
+        "google.auth": auth_mod,
+        "google.auth.exceptions": exceptions_mod,
+        "google.auth.transport": transport_mod,
+        "google.auth.transport.requests": requests_mod,
+        "google.oauth2": oauth2_mod,
+        "google.oauth2.credentials": credentials_mod,
+        "google_auth_oauthlib": oauthlib_mod,
+        "google_auth_oauthlib.flow": flow_mod,
+    }.items():
+        monkeypatch.setitem(sys.modules, name, mod)
+
+
+def test_refresh_failure_falls_back_to_flow_when_allowed(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """스코프 변경 등으로 refresh가 RefreshError면, allow_flow=True는 새 동의 flow로 재발급한다."""
+    token_file = tmp_path / "google_token.json"
+    token_file.write_text(json.dumps({"token": "stale"}), encoding="utf-8")
+    secrets_file = tmp_path / "client.json"
+    secrets_file.write_text("{}", encoding="utf-8")
+    calls: list[str] = []
+
+    class FakeRefreshError(Exception):
+        pass
+
+    class FakeRequest:
+        pass
+
+    class FakeCredentials:
+        valid = False
+        expired = True
+        refresh_token = "refresh-token"
+        scopes = GOOGLE_SCOPES
+
+        @classmethod
+        def from_authorized_user_file(cls, filename: str, scopes: list[str]) -> FakeCredentials:
+            return cls()
+
+        def refresh(self, request: FakeRequest) -> None:
+            calls.append("refresh")
+            raise FakeRefreshError("invalid_scope")
+
+    class FakeFreshCreds:
+        valid = True
+
+        def to_json(self) -> str:
+            return json.dumps({"token": "fresh", "scopes": GOOGLE_SCOPES})
+
+    class FakeFlow:
+        @classmethod
+        def from_client_secrets_file(cls, filename: str, scopes: list[str]) -> FakeFlow:
+            calls.append("flow")
+            return cls()
+
+        def run_local_server(self, port: int = 0) -> FakeFreshCreds:
+            return FakeFreshCreds()
+
+    _install_google_mocks(
+        monkeypatch,
+        credentials_cls=FakeCredentials,
+        request_cls=FakeRequest,
+        flow_cls=FakeFlow,
+        refresh_error_cls=FakeRefreshError,
+    )
+
+    creds = load_google_credentials(
+        token_file=token_file,
+        secrets_file=secrets_file,
+        scopes=GOOGLE_SCOPES,
+        allow_flow=True,
+    )
+
+    assert isinstance(creds, FakeFreshCreds)
+    assert calls == ["refresh", "flow"]  # refresh 실패 → flow 폴백
+    assert json.loads(token_file.read_text(encoding="utf-8"))["token"] == "fresh"
+
+
+def test_refresh_failure_raises_friendly_when_flow_disallowed(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """allow_flow=False면 raw RefreshError 대신 재인증 안내 RuntimeError로 안전 실패한다."""
+    token_file = tmp_path / "google_token.json"
+    token_file.write_text(json.dumps({"token": "stale"}), encoding="utf-8")
+
+    class FakeRefreshError(Exception):
+        pass
+
+    class FakeRequest:
+        pass
+
+    class FakeCredentials:
+        valid = False
+        expired = True
+        refresh_token = "refresh-token"
+        scopes = GOOGLE_SCOPES
+
+        @classmethod
+        def from_authorized_user_file(cls, filename: str, scopes: list[str]) -> FakeCredentials:
+            return cls()
+
+        def refresh(self, request: FakeRequest) -> None:
+            raise FakeRefreshError("invalid_scope")
+
+    class FakeFlow:
+        @classmethod
+        def from_client_secrets_file(cls, *_args, **_kwargs):  # noqa: ANN206, ANN002, ANN003
+            raise AssertionError("allow_flow=False면 flow를 돌리면 안 된다")
+
+    _install_google_mocks(
+        monkeypatch,
+        credentials_cls=FakeCredentials,
+        request_cls=FakeRequest,
+        flow_cls=FakeFlow,
+        refresh_error_cls=FakeRefreshError,
+    )
+
+    with pytest.raises(RuntimeError, match="재.*인증|토큰 없음/갱신 불가"):
+        load_google_credentials(
+            token_file=token_file,
+            secrets_file=tmp_path / "missing.json",
+            scopes=GOOGLE_SCOPES,
+            allow_flow=False,
+        )
 
 
 def test_google_calendar_create_event_calls_insert() -> None:

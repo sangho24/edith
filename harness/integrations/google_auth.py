@@ -59,6 +59,7 @@ def load_google_credentials(
     scopes = scopes or GOOGLE_SCOPES
 
     try:
+        from google.auth.exceptions import RefreshError  # type: ignore[import-not-found]
         from google.auth.transport.requests import Request  # type: ignore[import-not-found]
         from google.oauth2.credentials import Credentials  # type: ignore[import-not-found]
         from google_auth_oauthlib.flow import InstalledAppFlow  # type: ignore[import-not-found]
@@ -73,13 +74,20 @@ def load_google_credentials(
     if creds and creds.valid:
         return creds
     if creds and creds.expired and creds.refresh_token:
-        creds.refresh(Request())
-        _save_token(token_file, creds)
-        return creds
+        try:
+            creds.refresh(Request())
+            _save_token(token_file, creds)
+            return creds
+        except RefreshError:
+            # 스코프 변경(예: calendar.events 추가)·refresh_token 만료/취소 등으로
+            # 기존 토큰을 갱신할 수 없는 경우. 저장 토큰으로는 못 살리므로,
+            # allow_flow면 새 동의 flow로 재발급하고, 아니면 명확한 재인증 안내로 떨어진다.
+            creds = None
 
     if not allow_flow:
         raise RuntimeError(
-            f"유효한 Google 토큰 없음: {token_file}. `harness oauth google` 먼저 실행."
+            f"Google 토큰 없음/갱신 불가(스코프 변경·만료): {token_file}. "
+            "`harness oauth google`로 (재)인증하세요."
         )
     if not secrets_file.exists():
         raise RuntimeError(
