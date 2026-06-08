@@ -145,6 +145,53 @@ def test_compose_full(edith_home: Path) -> None:
     assert brief.digest["n"] == 3
 
 
+def test_compose_brief_gracefully_degrades_per_source(
+    edith_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """calendar/mail/digest/health 중 하나가 실패해도 부분 brief를 반환한다."""
+    _setup_calendar(edith_home, n=1)
+    _setup_mail(edith_home, n_urgent=1, n_important=1)
+    _setup_digest(edith_home, n=2)
+
+    class FailingMailSource:
+        def list_unread(self) -> list:
+            raise RuntimeError("mail down")
+
+    class FailingDigestSource:
+        def latest(self) -> dict:
+            raise RuntimeError("digest down")
+
+    class FailingHealthSource:
+        def samples(self, *_args: object) -> list:
+            raise RuntimeError("health down")
+
+    cases = {
+        "calendar": (
+            "select_source",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("calendar down")),
+        ),
+        "mail": ("select_mail_source", lambda *_args, **_kwargs: FailingMailSource()),
+        "digest": ("get_digest_source", lambda *_args, **_kwargs: FailingDigestSource()),
+        "health": ("get_health_source", lambda *_args, **_kwargs: FailingHealthSource()),
+    }
+
+    for source, (attr, replacement) in cases.items():
+        with monkeypatch.context() as m:
+            m.setattr(f"harness.morning.{attr}", replacement)
+            brief = compose_brief(edith_home)
+
+        assert source in brief.errors
+        assert brief.errors[source].startswith("RuntimeError")
+        assert "일부 소스 실패" in brief.render_text()
+
+        if source != "calendar":
+            assert brief.today["n_events"] == 1
+        if source != "mail":
+            assert brief.mail_summary["n_unread"] == 2
+        if source != "digest":
+            assert brief.digest["n"] == 2
+
+
 def test_compose_brief_now_uses_edith_tz_window(edith_home: Path) -> None:
     """now가 UTC여도 '오늘'을 Edith 시간대(KST)로 잡아 그날(KST) 일정·헬스를 포함한다.
 

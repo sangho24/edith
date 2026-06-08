@@ -73,6 +73,41 @@ def test_ui_brief_with_digest(home: Path) -> None:
     assert "테스트 항목" in data["text"]
 
 
+def test_ui_brief_and_summary_return_partial_errors(
+    home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """brief 소스 하나가 실패해도 GUI API는 200 + ok=True + errors로 응답한다."""
+    (home / "raw" / "digest" / "latest.json").write_text(
+        json.dumps({"date": "2026-05-14", "items": [{"title": "살아있는 digest"}]}),
+        encoding="utf-8",
+    )
+
+    class FailingMailSource:
+        def list_unread(self) -> list:
+            raise RuntimeError("mail backend down")
+
+    monkeypatch.setattr(
+        "harness.morning.select_mail_source",
+        lambda *_args, **_kwargs: FailingMailSource(),
+    )
+
+    client = TestClient(make_app(edith_home=home, secret=SECRET))
+
+    brief_resp = client.get("/ui/brief")
+    assert brief_resp.status_code == 200
+    brief = brief_resp.json()
+    assert brief["ok"] is True
+    assert "mail" in brief["errors"]
+    assert "살아있는 digest" in brief["text"]
+
+    summary_resp = client.get("/ui/summary")
+    assert summary_resp.status_code == 200
+    summary = summary_resp.json()
+    assert summary["ok"] is True
+    assert "mail" in summary["errors"]
+    assert summary["digest_n"] == 1
+
+
 # ── GET /ui/traces ──────────────────────────────────────────────────────
 
 

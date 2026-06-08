@@ -248,9 +248,14 @@ def make_app(
     def ui_brief() -> dict[str, Any]:
         """오늘 morning brief 텍스트 (GUI Brief 탭). 90s 캐시."""
         try:
-            return {"ok": True, "text": _cached_brief().render_text()}
+            b = _cached_brief()
+            return {"ok": True, "text": b.render_text(), "errors": getattr(b, "errors", {})}
         except Exception as e:  # pragma: no cover
-            return {"ok": False, "error": str(e)}
+            return {
+                "ok": True,
+                "text": f"☀️ Edith\n\n⚠️ brief 생성 실패: {e}",
+                "errors": {"brief": str(e)},
+            }
 
     @app.get("/ui/summary")
     def ui_summary() -> dict[str, Any]:
@@ -259,9 +264,19 @@ def make_app(
             from harness.integrations.apple_health import format_for_brief
 
             b = _cached_brief()
-            props = _proposal_store().list(status="proposed")
-            queue = _approval_queue()
-            queue.expire_old()
+            errors = dict(getattr(b, "errors", {}))
+            proposals = 0
+            approvals = 0
+            try:
+                proposals = len(_proposal_store().list(status="proposed"))
+            except Exception as e:
+                errors["proposals"] = str(e)
+            try:
+                queue = _approval_queue()
+                queue.expire_old()
+                approvals = len(queue.list(status="pending"))
+            except Exception as e:
+                errors["approvals"] = str(e)
             return {
                 "ok": True,
                 "date": b.today_str,
@@ -273,11 +288,26 @@ def make_app(
                 "digest_n": b.digest.get("n", 0),
                 "health": format_for_brief(b.health) if b.health else "",
                 "top3": b.top3,
-                "proposals": len(props),
-                "approvals": len(queue.list(status="pending")),
+                "proposals": proposals,
+                "approvals": approvals,
+                "errors": errors,
             }
         except Exception as e:  # pragma: no cover
-            return {"ok": False, "error": str(e)}
+            return {
+                "ok": True,
+                "date": "",
+                "events_n": 0,
+                "events": [],
+                "busy_min": 0,
+                "unread": 0,
+                "mail_by_priority": {},
+                "digest_n": 0,
+                "health": "",
+                "top3": [],
+                "proposals": 0,
+                "approvals": 0,
+                "errors": {"summary": str(e)},
+            }
 
     @app.get("/ui/traces")
     def ui_traces(last: int = 20) -> dict[str, Any]:

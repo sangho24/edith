@@ -37,6 +37,7 @@ class MorningBrief:
     digest: dict = field(default_factory=lambda: {"date": None, "items": [], "n": 0})
     health: dict = field(default_factory=dict)
     top3: list[str] = field(default_factory=list)
+    errors: dict[str, str] = field(default_factory=dict)
 
     def render_text(self) -> str:
         lines = [
@@ -44,6 +45,12 @@ class MorningBrief:
             f"☀️ Edith · {self.today_str}",
             "─" * 50,
         ]
+
+        if self.errors:
+            lines.append("⚠️ 일부 소스 실패:")
+            for source, msg in self.errors.items():
+                lines.append(f"  • {source}: {msg}")
+            lines.append("")
 
         # Top 3
         if self.top3:
@@ -120,6 +127,13 @@ def _build_top3(today: dict, mail_summary: dict, digest: dict) -> list[str]:
     return top3[:3]
 
 
+def _error_marker(exc: Exception) -> str:
+    msg = str(exc).strip()
+    if len(msg) > 160:
+        msg = msg[:157] + "..."
+    return f"{type(exc).__name__}: {msg}" if msg else type(exc).__name__
+
+
 def compose_brief(edith_home: Path, now: datetime | None = None) -> MorningBrief:
     """오늘 brief 합성 (no LLM).
 
@@ -131,41 +145,53 @@ def compose_brief(edith_home: Path, now: datetime | None = None) -> MorningBrief
     brief = MorningBrief(today_str=today_str)
 
     # 1. 일정 — macOS 면 EventKit, 아니면 LocalCalendarSource (fixture/json)
-    fixture_env = os.environ.get("EDITH_CALENDAR_FIXTURE")
-    cal_source = select_source(
-        edith_home=edith_home,
-        fixture_path=Path(fixture_env) if fixture_env else None,
-    )
-    brief.today = today_view(cal_source, now)
+    try:
+        fixture_env = os.environ.get("EDITH_CALENDAR_FIXTURE")
+        cal_source = select_source(
+            edith_home=edith_home,
+            fixture_path=Path(fixture_env) if fixture_env else None,
+        )
+        brief.today = today_view(cal_source, now)
+    except Exception as e:
+        brief.errors["calendar"] = _error_marker(e)
 
     # 2. 메일 — fixture/local(raw) 또는 EDITH_MAIL_BACKEND=gmail 실연동
-    items = triage(select_mail_source(edith_home).list_unread())
-    counts = Counter(i.priority for i in items)
-    brief.mail_summary = {
-        "n_unread": len(items),
-        "by_priority": dict(counts),
-        "urgent": [i.message.subject for i in items if i.priority == "urgent"],
-        "important": [i.message.subject for i in items if i.priority == "important"],
-    }
+    try:
+        items = triage(select_mail_source(edith_home).list_unread())
+        counts = Counter(i.priority for i in items)
+        brief.mail_summary = {
+            "n_unread": len(items),
+            "by_priority": dict(counts),
+            "urgent": [i.message.subject for i in items if i.priority == "urgent"],
+            "important": [i.message.subject for i in items if i.priority == "important"],
+        }
+    except Exception as e:
+        brief.errors["mail"] = _error_marker(e)
 
     # 3. ds-digest — 명시적 로컬 경로(EDITH_DS_DIGEST_LATEST) 우선,
     #    아니면 get_digest_source (EDITH_DS_DIGEST_URL 있으면 GitHub Pages).
-    fixture_env = os.environ.get("EDITH_DS_DIGEST_LATEST")
-    if fixture_env:
-        brief.digest = LocalDigestSource(Path(fixture_env)).latest()
-    else:
-        brief.digest = get_digest_source(edith_home).latest()
+    try:
+        fixture_env = os.environ.get("EDITH_DS_DIGEST_LATEST")
+        if fixture_env:
+            brief.digest = LocalDigestSource(Path(fixture_env)).latest()
+        else:
+            brief.digest = get_digest_source(edith_home).latest()
+    except Exception as e:
+        brief.errors["digest"] = _error_marker(e)
 
     # 4. 헬스 (F15) — 오늘치 Apple Health 요약.
     #    now 명시 시 '오늘'을 Edith 시간대(KST)로 통일(일정 창과 일치). None이면 기존 date.today().
-    if now is not None:
-        from harness.localtime import edith_today
+    try:
+        if now is not None:
+            from harness.localtime import edith_today
 
-        today_d = edith_today(now)
-    else:
-        today_d = date.today()
-    samples = get_health_source(edith_home).samples(today_d, today_d)
-    brief.health = daily_summary(samples, today_d)
+            today_d = edith_today(now)
+        else:
+            today_d = date.today()
+        samples = get_health_source(edith_home).samples(today_d, today_d)
+        brief.health = daily_summary(samples, today_d)
+    except Exception as e:
+        brief.errors["health"] = _error_marker(e)
 
     # 5. Top 3
     brief.top3 = _build_top3(brief.today, brief.mail_summary, brief.digest)
