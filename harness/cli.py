@@ -131,6 +131,21 @@ def dash(window: int) -> None:
 
 
 @main.command()
+def doctor() -> None:
+    """로컬 Edith 설정 진단 — 누락 항목과 고치는 법을 출력."""
+    from harness.doctor import run_diagnostics
+
+    result = run_diagnostics(_edith_home())
+    click.echo(f"Edith doctor: {result.edith_home}")
+    for check in result.checks:
+        mark = "✓" if check.ok else "✗"
+        click.echo(f"{mark} {check.name}: {check.detail}")
+        click.echo(f"  fix: {check.fix}")
+    if not result.ok:
+        sys.exit(1)
+
+
+@main.command()
 @click.option("--dry-run", is_flag=True, help="실행 안 하고 새 파일 list만")
 def compile(dry_run: bool) -> None:  # noqa: A001
     """raw → wiki LLM 컴파일 (Phase 2 W1)."""
