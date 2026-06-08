@@ -8,6 +8,7 @@ from typing import Any
 
 from harness.integrations.ds_digest import (
     GitHubPagesDigestSource,
+    HtmlArchiveDigestSource,
     LocalDigestSource,
     _httpx_fetch,
     get_digest_source,
@@ -189,3 +190,156 @@ def test_github_pages_default_fetch_bad_status_is_graceful(monkeypatch) -> None:
 
     result = GitHubPagesDigestSource(url="https://x/latest.json").latest()
     assert result == {"date": None, "items": [], "n": 0}
+
+
+# ── D3 HtmlArchiveDigestSource ───────────────────────────────────────────
+
+
+INDEX_HTML = """
+<html><body>
+<ul>
+  <li><a href="2026-06-06.html">📄 2026-06-06</a></li>
+  <li><a href="2026-06-07.html">📄 2026-06-07</a></li>
+  <li><a href="2026-06-05.html">📄 2026-06-05</a></li>
+</ul>
+</body></html>
+"""
+
+DAY_HTML = """
+<html><body>
+<div class="item">
+  <div class="item-meta">kakao tech · 관련도 8</div>
+  <h2>커뮤니티로 진화한 오픈채팅, AI로 슬기롭게 연결하다</h2>
+  <a href="https://youtu.be/hB_UaNcYaAc">watch</a>
+  <div class="tags">AI 추천시스템 커뮤니티 Product MLOps</div>
+  <div class="key-point">ignored rich content</div>
+</div>
+<div class="item">
+  <div class="item-meta">arxiv · 관련도 9.5</div>
+  <h2>Representation Engineering for Agents</h2>
+  <a href="https://arxiv.org/abs/2606.00001">paper</a>
+  <div class="tags">Agents Interpretability</div>
+</div>
+</body></html>
+"""
+
+
+def test_html_archive_selects_latest_date_and_parses_items() -> None:
+    seen: list[str] = []
+
+    def fetch(url: str) -> str:
+        seen.append(url)
+        if url == "https://sangho24.github.io/ds-digest/":
+            return INDEX_HTML
+        if url == "https://sangho24.github.io/ds-digest/2026-06-07.html":
+            return DAY_HTML
+        raise AssertionError(f"unexpected URL: {url}")
+
+    result = HtmlArchiveDigestSource(
+        url="https://sangho24.github.io/ds-digest/",
+        fetch_fn=fetch,
+    ).latest()
+
+    assert seen == [
+        "https://sangho24.github.io/ds-digest/",
+        "https://sangho24.github.io/ds-digest/2026-06-07.html",
+    ]
+    assert result["date"] == "2026-06-07"
+    assert result["n"] == 2
+    assert result["items"][0] == {
+        "title": "커뮤니티로 진화한 오픈채팅, AI로 슬기롭게 연결하다",
+        "source": "kakao tech",
+        "url": "https://youtu.be/hB_UaNcYaAc",
+        "summary": "AI 추천시스템 커뮤니티 Product MLOps",
+        "score": 8.0,
+    }
+    assert result["items"][1]["source"] == "arxiv"
+    assert result["items"][1]["score"] == 9.5
+
+
+def test_html_archive_direct_date_url_skips_index() -> None:
+    seen: list[str] = []
+
+    def fetch(url: str) -> str:
+        seen.append(url)
+        return DAY_HTML
+
+    result = HtmlArchiveDigestSource(
+        url="https://sangho24.github.io/ds-digest/2026-06-07.html",
+        fetch_fn=fetch,
+    ).latest()
+
+    assert seen == ["https://sangho24.github.io/ds-digest/2026-06-07.html"]
+    assert result["date"] == "2026-06-07"
+    assert result["n"] == 2
+
+
+def test_html_archive_source_defaults_and_score_falls_back() -> None:
+    html = """
+    <div class="item">
+      <h2><span>No meta item</span></h2>
+      <a href="https://example.com/x">x</a>
+    </div>
+    <div class="item">
+      <div class="item-meta">RSS feed</div>
+      <h2>Without relevance score</h2>
+      <a href="https://example.com/y">y</a>
+    </div>
+    """
+
+    result = HtmlArchiveDigestSource(
+        url="https://sangho24.github.io/ds-digest/2026-06-07.html",
+        fetch_fn=lambda _: html,
+    ).latest()
+
+    assert result["items"][0]["source"] == "ds-digest"
+    assert result["items"][0]["score"] == 0.0
+    assert result["items"][1]["source"] == "RSS feed"
+    assert result["items"][1]["score"] == 0.0
+
+
+def test_html_archive_network_failure_is_graceful() -> None:
+    def boom(_: str) -> str:
+        raise ConnectionError("network down")
+
+    result = HtmlArchiveDigestSource(
+        url="https://sangho24.github.io/ds-digest/",
+        fetch_fn=boom,
+    ).latest()
+
+    assert result == {"date": None, "items": [], "n": 0}
+
+
+def test_html_archive_empty_index_is_graceful() -> None:
+    result = HtmlArchiveDigestSource(
+        url="https://sangho24.github.io/ds-digest/",
+        fetch_fn=lambda _: "<html></html>",
+    ).latest()
+
+    assert result == {"date": None, "items": [], "n": 0}
+
+
+def test_html_archive_page_with_no_items_is_graceful() -> None:
+    result = HtmlArchiveDigestSource(
+        url="https://sangho24.github.io/ds-digest/2026-06-07.html",
+        fetch_fn=lambda _: "<html></html>",
+    ).latest()
+
+    assert result == {"date": None, "items": [], "n": 0}
+
+
+def test_get_digest_source_uses_html_archive_for_root_url(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("EDITH_DS_DIGEST_URL", "https://sangho24.github.io/ds-digest/")
+    src = get_digest_source(tmp_path)
+    assert isinstance(src, HtmlArchiveDigestSource)
+    assert src.url == "https://sangho24.github.io/ds-digest/"
+
+
+def test_get_digest_source_uses_html_archive_for_date_url(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv(
+        "EDITH_DS_DIGEST_URL",
+        "https://sangho24.github.io/ds-digest/2026-06-07.html",
+    )
+    src = get_digest_source(tmp_path)
+    assert isinstance(src, HtmlArchiveDigestSource)
+    assert src.url == "https://sangho24.github.io/ds-digest/2026-06-07.html"

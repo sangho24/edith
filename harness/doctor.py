@@ -280,8 +280,8 @@ def run_diagnostics(
             env_map,
             label="EDITH_DS_DIGEST_URL(선택)",
             fix=(
-                ".env에 EDITH_DS_DIGEST_URL=https://sangho24.github.io/ds-digest/latest.json "
-                "형태로 추가하면 GitHub Pages digest를 읽습니다."
+                ".env에 EDITH_DS_DIGEST_URL=https://sangho24.github.io/ds-digest/ "
+                "형태로 추가하면 GitHub Pages HTML archive digest를 읽습니다."
             ),
         ),
         _check_backend(

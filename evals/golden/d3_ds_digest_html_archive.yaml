@@ -1,0 +1,26 @@
+# D3 — ds-digest HTML archive page parser.
+id: d3_ds_digest_html_archive
+kind: call
+phase: commercial
+component: D3
+description: |
+  ds-digest GitHub Pages가 발행하는 날짜별 HTML 페이지의 div.item 블록을
+  네트워크 없이 파싱해 digest item으로 변환한다.
+
+target: harness.integrations.ds_digest:_parse_html_digest_page
+
+inputs:
+  kwargs:
+    date: "2026-06-07"
+    html: |
+      <div class="item">
+        <div class="item-meta">kakao tech · 관련도 8</div>
+        <h2>커뮤니티로 진화한 오픈채팅, AI로 슬기롭게 연결하다</h2>
+        <a href="https://youtu.be/hB_UaNcYaAc">watch</a>
+        <div class="tags">AI 추천시스템 커뮤니티 Product MLOps</div>
+      </div>
+
+expected:
+  returns_contains:
+    date: "2026-06-07"
+    n: 1
