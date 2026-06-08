@@ -10,9 +10,9 @@ trigger_state.json: edith_home/harness/trigger_state.json. {"fired": [slot, ...]
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
+from harness.storage import atomic_write_json, read_json_file
 from harness.triggers.rules import RULES, FiredTrigger, TriggerRule
 
 
@@ -24,12 +24,7 @@ def _state_path(edith_home: Path) -> Path:
 def load_state(edith_home: Path) -> dict:
     """trigger_state.json 로드. 없으면 빈 상태({"fired": []})."""
     path = _state_path(edith_home)
-    if not path.exists():
-        return {"fired": []}
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return {"fired": []}
+    data = read_json_file(path, {"fired": []})
     if not isinstance(data, dict):
         return {"fired": []}
     data.setdefault("fired", [])
@@ -39,8 +34,7 @@ def load_state(edith_home: Path) -> dict:
 def save_state(edith_home: Path, state: dict) -> Path:
     """state를 trigger_state.json에 기록. 경로 반환."""
     path = _state_path(edith_home)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+    atomic_write_json(path, state)
     return path
 
 

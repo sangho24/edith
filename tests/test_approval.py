@@ -183,6 +183,19 @@ def test_persistence_across_instances(tmp_path: Path) -> None:
     assert fetched.action_type == "x"
 
 
+def test_two_queue_instances_create_preserves_both_requests(tmp_path: Path) -> None:
+    """read-modify-write가 인스턴스별로 이어져도 두 create 모두 보존."""
+    p = tmp_path / "approvals.json"
+    q1 = ApprovalQueue(p)
+    q2 = ApprovalQueue(p)
+
+    r1 = q1.create("gmail_send", "gmail", "one")
+    r2 = q2.create("gmail_send", "gmail", "two")
+
+    ids = {r.id for r in ApprovalQueue(p).list()}
+    assert ids == {r1.id, r2.id}
+
+
 def test_corrupt_json_returns_empty(tmp_path: Path) -> None:
     p = tmp_path / "approvals.json"
     p.write_text("{not valid json", encoding="utf-8")

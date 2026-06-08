@@ -22,6 +22,7 @@ import hashlib
 import hmac
 import logging
 import os
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -232,6 +233,7 @@ def make_app(
     # 실 Gmail/Calendar 호출이 무거워서(메일 50건 fetch ~수초) brief를 90s 캐시.
     # /ui/brief·/ui/summary가 공유. 앱 인스턴스별 캐시라 테스트 격리 안전.
     _brief_cache: dict[str, Any] = {}
+    _brief_cache_lock = threading.Lock()
 
     def _cached_brief() -> Any:
         import time
@@ -239,13 +241,14 @@ def make_app(
         from harness.localtime import edith_now
         from harness.morning import compose_brief
 
-        hit = _brief_cache.get("b")
-        now = time.time()
-        if hit is not None and now - hit[0] < 90:
-            return hit[1]
-        brief = compose_brief(home, now=edith_now())
-        _brief_cache["b"] = (now, brief)
-        return brief
+        with _brief_cache_lock:
+            hit = _brief_cache.get("b")
+            now = time.time()
+            if hit is not None and now - hit[0] < 90:
+                return hit[1]
+            brief = compose_brief(home, now=edith_now())
+            _brief_cache["b"] = (now, brief)
+            return brief
 
     @app.get("/health")
     def health() -> dict[str, Any]:

@@ -14,12 +14,13 @@ pending으로 만들 뿐, 자동 실행하지 않는다(L2→L3은 Approvals 탭
 
 from __future__ import annotations
 
-import json
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
+
+from harness.storage import atomic_write_json, file_lock, read_json_file
 
 ProposalStatus = Literal["proposed", "closed"]
 
@@ -126,33 +127,28 @@ class ProposalStore:
         self.path = path
 
     def _load(self) -> list[Proposal]:
-        if not self.path.exists():
-            return []
-        try:
-            data = json.loads(self.path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            return []
+        data = read_json_file(self.path, [])
         out: list[Proposal] = []
-        for d in data:
-            steps = [ProposalStep(**s) for s in d.get("steps", [])]
-            out.append(Proposal(**{**d, "steps": steps}))
+        try:
+            for d in data:
+                steps = [ProposalStep(**s) for s in d.get("steps", [])]
+                out.append(Proposal(**{**d, "steps": steps}))
+        except TypeError:
+            return []
         return out
 
     def _save(self, proposals: list[Proposal]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(
-            json.dumps([asdict(p) for p in proposals], ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        atomic_write_json(self.path, [asdict(p) for p in proposals])
 
     def create(
         self, title: str, rationale: str, scope: str,
         steps: list[ProposalStep], trigger: str = "task",
     ) -> Proposal:
         p = Proposal.new(title, rationale, scope, steps, trigger)
-        all_ = self._load()
-        all_.append(p)
-        self._save(all_)
+        with file_lock(self.path):
+            all_ = self._load()
+            all_.append(p)
+            self._save(all_)
         return p
 
     def list(self, status: ProposalStatus | None = None) -> list[Proposal]:
@@ -163,10 +159,11 @@ class ProposalStore:
         return next((p for p in self._load() if p.id == id_), None)
 
     def close(self, id_: str) -> Proposal | None:
-        all_ = self._load()
-        for p in all_:
-            if p.id == id_:
-                p.status = "closed"
-                self._save(all_)
-                return p
+        with file_lock(self.path):
+            all_ = self._load()
+            for p in all_:
+                if p.id == id_:
+                    p.status = "closed"
+                    self._save(all_)
+                    return p
         return None

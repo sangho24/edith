@@ -71,6 +71,16 @@ def test_store_roundtrip_persists_steps(tmp_path: Path) -> None:
     assert got.steps[0].action_type == "gmail_send"
 
 
+def test_two_store_instances_create_preserves_both_proposals(tmp_path: Path) -> None:
+    path = tmp_path / "proposals.json"
+    step = _step_from_dict(1, {"intent": "a", "support_refs": ["r"]})
+    p1 = ProposalStore(path).create("one", "", "personal", [step])
+    p2 = ProposalStore(path).create("two", "", "personal", [step])
+
+    ids = {p.id for p in ProposalStore(path).list()}
+    assert ids == {p1.id, p2.id}
+
+
 # ── propose_workflow tool ────────────────────────────────────────────────
 
 

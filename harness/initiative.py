@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Literal
 
 from harness.morning import compose_brief
+from harness.storage import atomic_write_json, file_lock, read_json_file
 
 # anti-atrophy 보호 카테고리 — 이 일들은 Edith가 대신 하면 사용자의 역량이 위축된다.
 # 보호 카테고리는 action_hint를 받지 못하고(대행 금지), 기껏해야 nudge로만 노출된다.
@@ -114,12 +115,7 @@ def _load_suggestions_state(edith_home: Path) -> dict:
     구조: {"push_ledger": {"YYYY-MM-DD": int, ...}, "last": [Suggestion dict, ...]}
     """
     path = _harness_dir(edith_home) / _SUGGESTIONS_FILE
-    if not path.exists():
-        return {"push_ledger": {}, "last": []}
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return {"push_ledger": {}, "last": []}
+    data = read_json_file(path, {"push_ledger": {}, "last": []})
     if not isinstance(data, dict):
         return {"push_ledger": {}, "last": []}
     data.setdefault("push_ledger", {})
@@ -130,9 +126,7 @@ def _load_suggestions_state(edith_home: Path) -> dict:
 def _save_suggestions_state(edith_home: Path, state: dict) -> None:
     """suggestions.json 저장."""
     path = _harness_dir(edith_home) / _SUGGESTIONS_FILE
-    path.write_text(
-        json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    atomic_write_json(path, state)
 
 
 def _load_feedback(edith_home: Path) -> list[dict]:
@@ -560,21 +554,23 @@ def run_checkin(
     )
 
     # 4. PushGate (weekday/weekend cap)
-    state = _load_suggestions_state(edith_home)
-    push_ledger: dict = state["push_ledger"]
-    gate = PushGate(weekday_cap=weekday_cap, weekend_cap=weekend_cap)
-    pushed = gate.filter(candidates, push_ledger, now_iso)
+    path = _harness_dir(edith_home) / _SUGGESTIONS_FILE
+    with file_lock(path):
+        state = _load_suggestions_state(edith_home)
+        push_ledger: dict = state["push_ledger"]
+        gate = PushGate(weekday_cap=weekday_cap, weekend_cap=weekend_cap)
+        pushed = gate.filter(candidates, push_ledger, now_iso)
 
-    # 5. 상태 갱신 — push_ledger 증가 + last 스냅샷 저장
-    for s in pushed:
-        s.status = "shown"
-    day = _parse_date(now_iso)
-    if day is not None and pushed:
-        key = day.isoformat()
-        push_ledger[key] = int(push_ledger.get(key, 0)) + len(pushed)
-    state["push_ledger"] = push_ledger
-    state["last"] = [s.to_dict() for s in pushed]
-    _save_suggestions_state(edith_home, state)
+        # 5. 상태 갱신 — push_ledger 증가 + last 스냅샷 저장
+        for s in pushed:
+            s.status = "shown"
+        day = _parse_date(now_iso)
+        if day is not None and pushed:
+            key = day.isoformat()
+            push_ledger[key] = int(push_ledger.get(key, 0)) + len(pushed)
+        state["push_ledger"] = push_ledger
+        state["last"] = [s.to_dict() for s in pushed]
+        _save_suggestions_state(edith_home, state)
 
     return {
         "slot": slot,
